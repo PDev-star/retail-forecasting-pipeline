@@ -1,0 +1,51 @@
+name: FastAPI Gateway Tests
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'fastapi-gateway/**'
+      - '.github/workflows/test-fastapi.yml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'fastapi-gateway/**'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python 3.11
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: Install dependencies
+      run: |
+        cd fastapi-gateway
+        pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest pytest-cov httpx
+    
+    - name: Run tests with coverage
+      env:
+        DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+        DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+        API_KEYS: test-key-123
+      run: |
+        cd fastapi-gateway
+        pytest tests/ -v --cov=. --cov-report=term --cov-report=html
+    
+    - name: Check coverage threshold
+      run: |
+        cd fastapi-gateway
+        coverage report --fail-under=80
+    
+    - name: Upload coverage report
+      uses: actions/upload-artifact@v3
+      with:
+        name: fastapi-coverage-report
+        path: fastapi-gateway/htmlcov/

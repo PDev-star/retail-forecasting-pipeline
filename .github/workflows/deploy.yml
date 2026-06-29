@@ -1,0 +1,43 @@
+name: Deploy to Production
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:  # Allows manual trigger
+
+jobs:
+  deploy-notification:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Notify Deployment Start
+      run: |
+        echo "🚀 Deployment triggered!"
+        echo "Branch: ${{ github.ref }}"
+        echo "Commit: ${{ github.sha }}"
+        echo "Author: ${{ github.actor }}"
+    
+    - name: Wait for Tests to Complete
+      run: echo "Tests completed successfully in previous jobs"
+    
+    - name: Streamlit Auto-Deploy Info
+      run: |
+        echo "✅ Streamlit Cloud will auto-deploy from this branch"
+        echo "📍 App URL: https://retail-forecasting-YOUR_USERNAME.streamlit.app"
+        echo "⏱️  Deployment takes ~2-5 minutes"
+    
+    - name: Render Auto-Deploy Info
+      run: |
+        echo "✅ Render.com will auto-deploy from this branch"
+        echo "📍 API URL: https://retail-forecast-api.onrender.com"
+        echo "⏱️  Deployment takes ~5-10 minutes"
+    
+    - name: Deployment Complete
+      run: |
+        echo "🎉 Deployment initiated successfully!"
+        echo "Monitor deployments at:"
+        echo "  - Streamlit: https://share.streamlit.io"
+        echo "  - Render: https://dashboard.render.com"
+

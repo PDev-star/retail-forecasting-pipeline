@@ -1,0 +1,35 @@
+name: Linting
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python 3.11
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: Install linting tools
+      run: |
+        pip install flake8 black isort
+    
+    - name: Run flake8
+      run: |
+        flake8 fastapi-gateway/ streamlit-app/ --max-line-length=120 --exclude=tests/,venv/
+    
+    - name: Check code formatting with black
+      run: |
+        black --check fastapi-gateway/ streamlit-app/ --exclude='/(venv|tests)/'
+    
+    - name: Check import sorting with isort
+      run: |
+        isort --check-only fastapi-gateway/ streamlit-app/ --skip venv --skip tests
