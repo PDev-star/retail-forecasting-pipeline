@@ -2,7 +2,7 @@ name: Streamlit App Tests
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ main, develop, GitConnectionTest ]
     paths:
       - 'streamlit-app/**'
       - '.github/workflows/test-streamlit.yml'

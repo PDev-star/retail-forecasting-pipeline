@@ -2,7 +2,7 @@ name: FastAPI Gateway Tests
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ main, develop, GitConnectionTest ]
     paths:
       - 'fastapi-gateway/**'
       - '.github/workflows/test-fastapi.yml'

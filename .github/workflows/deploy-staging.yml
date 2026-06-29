@@ -2,7 +2,7 @@ name: Deploy to Staging
 
 on:
   push:
-    branches: [ develop, staging ]
+    branches: [ develop, staging, GitConnectionTest ]
   pull_request:
     branches: [ main ]
 
@@ -18,10 +18,12 @@ jobs:
         echo "🔧 Staging deployment"
         echo "Branch: ${{ github.ref }}"
         echo ""
-        echo "To enable staging:"
-        echo "1. Create 'develop' branch in GitHub"
-        echo "2. Connect staging apps in Streamlit/Render"
-        echo "3. Point them to 'develop' branch"
+        echo " Streamlit will auto-deploy from this branch"
+        echo " Render will auto-deploy from this branch"
+        echo ""
+        echo "Deployment timeline:"
+        echo "  • Streamlit: 3-5 minutes"
+        echo "  • Render: 5-8 minutes"
     
     - name: Run Tests First
       run: echo "Tests must pass before staging deployment"
