@@ -1,11 +1,12 @@
 # app.py - Retail Forecasting Streamlit App
 # Deploy to Streamlit Community Cloud
 
-import streamlit as st
-import requests
+from datetime import datetime, timedelta
+
 import pandas as pd
 import plotly.graph_objects as go
-from datetime import datetime, timedelta
+import requests
+import streamlit as st
 
 # Page configuration
 st.set_page_config(
@@ -384,8 +385,7 @@ if "forecast" in st.session_state:
         trend = "increasing" if forecast[-1] > forecast[0] else "decreasing"
         volatility = max(forecast) - min(forecast)
 
-        st.markdown(
-            f"""
+        st.markdown(f"""
         **Forecast Summary for {product['name']}**
         
         📊 **Demand Pattern Analysis:**
@@ -406,16 +406,13 @@ if "forecast" in st.session_state:
         💼 **Business Impact:**
         - Estimated capital tied in inventory: **₹{recommended_stock * 50:,.0f}** (assuming ₹50/unit cost)
         - Potential lost sales if understocked: **₹{reorder_point * 100:,.0f}** (assuming ₹100/unit revenue)
-        """
-        )
+        """)
 
-        st.info(
-            """
+        st.info("""
         **Note:** These insights are generated using AutoETS forecasting model with MLflow tracking. 
         Forecasts are updated daily with latest sales data. For critical business decisions, 
         consult with procurement and operations teams.
-        """
-        )
+        """)
 
 else:
     # ========================================================================
@@ -423,8 +420,7 @@ else:
     # ========================================================================
     st.info("👆 Select a product and forecast horizon from the sidebar, then click 'Generate Forecast' to begin.")
 
-    st.markdown(
-        """
+    st.markdown("""
     ## Welcome to InventoryForge
     
     This **Predictive Inventory Analytics Engine** helps you:
@@ -446,8 +442,7 @@ else:
     - **This App:** Streamlit (calls endpoints via REST API)
     
     **No direct Delta Lake connection needed!** The Model Serving endpoints handle all data access.
-    """
-    )
+    """)
 
 # ============================================================================
 # FOOTER

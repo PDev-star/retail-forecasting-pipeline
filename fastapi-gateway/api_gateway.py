@@ -1,11 +1,12 @@
 # api_gateway.py - FastAPI Gateway for Databricks Model Serving
 # Deploy on Render.com (FREE!)
 
-from fastapi import FastAPI, Header, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-import requests
 import os
 from datetime import datetime
+
+import requests
+from fastapi import FastAPI, Header, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI(
     title="Retail Forecast API Gateway",

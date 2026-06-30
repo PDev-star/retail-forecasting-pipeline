@@ -1,14 +1,15 @@
 # test_gateway.py - Unit tests for FastAPI Gateway
+import os
+import sys
+from unittest.mock import MagicMock, patch
+
 import pytest
 from fastapi.testclient import TestClient
-from unittest.mock import patch, MagicMock
-import sys
-import os
 
 # Add parent directory to path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from api_gateway import app, verify_api_key, PRODUCTS
+from api_gateway import PRODUCTS, app, verify_api_key
 
 client = TestClient(app)
 
