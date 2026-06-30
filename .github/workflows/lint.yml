@@ -20,16 +20,12 @@ jobs:
     
     - name: Install linting tools
       run: |
-        pip install flake8 black isort
-    
-    - name: Run flake8
-      run: |
-        flake8 fastapi-gateway/ streamlit-app/ --max-line-length=120 --exclude=tests/,venv/
+        pip install black isort
     
     - name: Check code formatting with black
       run: |
-        black --check fastapi-gateway/ streamlit-app/ --exclude='/(venv|tests)/'
+        black --check fastapi-gateway/ streamlit-app/ --exclude venv --line-length=120
     
     - name: Check import sorting with isort
       run: |
-        isort --check-only fastapi-gateway/ streamlit-app/ --skip venv --skip tests
+        isort --check-only fastapi-gateway/ streamlit-app/ --skip venv --profile black

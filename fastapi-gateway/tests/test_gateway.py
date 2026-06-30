@@ -62,9 +62,7 @@ def test_forecast_missing_api_key():
 
 def test_forecast_invalid_api_key():
     """Test forecast endpoint with invalid API key returns 401"""
-    response = client.post(
-        "/forecast?product_id=Cat1&horizon=14", headers={"X-API-Key": INVALID_KEY}
-    )
+    response = client.post("/forecast?product_id=Cat1&horizon=14", headers={"X-API-Key": INVALID_KEY})
     assert response.status_code == 401
     assert "Invalid API key" in response.json()["detail"]
 
@@ -82,15 +80,11 @@ def test_forecast_invalid_product():
 def test_forecast_invalid_horizon():
     """Test forecast with invalid horizon returns 400"""
     # Too low
-    response = client.post(
-        "/forecast?product_id=Cat1&horizon=5", headers={"X-API-Key": VALID_TEST_KEY}
-    )
+    response = client.post("/forecast?product_id=Cat1&horizon=5", headers={"X-API-Key": VALID_TEST_KEY})
     assert response.status_code == 400
 
     # Too high
-    response = client.post(
-        "/forecast?product_id=Cat1&horizon=100", headers={"X-API-Key": VALID_TEST_KEY}
-    )
+    response = client.post("/forecast?product_id=Cat1&horizon=100", headers={"X-API-Key": VALID_TEST_KEY})
     assert response.status_code == 400
 
 
@@ -100,14 +94,10 @@ def test_forecast_success(mock_post):
     # Mock Databricks response
     mock_response = MagicMock()
     mock_response.status_code = 200
-    mock_response.json.return_value = {
-        "predictions": [{"AutoETS": 45.2}, {"AutoETS": 43.8}, {"AutoETS": 44.1}]
-    }
+    mock_response.json.return_value = {"predictions": [{"AutoETS": 45.2}, {"AutoETS": 43.8}, {"AutoETS": 44.1}]}
     mock_post.return_value = mock_response
 
-    response = client.post(
-        "/forecast?product_id=Cat1&horizon=14", headers={"X-API-Key": VALID_TEST_KEY}
-    )
+    response = client.post("/forecast?product_id=Cat1&horizon=14", headers={"X-API-Key": VALID_TEST_KEY})
 
     assert response.status_code == 200
     data = response.json()
@@ -126,9 +116,7 @@ def test_forecast_databricks_error(mock_post):
     mock_response.text = "Internal server error"
     mock_post.return_value = mock_response
 
-    response = client.post(
-        "/forecast?product_id=Cat1&horizon=14", headers={"X-API-Key": VALID_TEST_KEY}
-    )
+    response = client.post("/forecast?product_id=Cat1&horizon=14", headers={"X-API-Key": VALID_TEST_KEY})
 
     assert response.status_code == 502
 
@@ -138,9 +126,7 @@ def test_forecast_timeout(mock_post):
     """Test handling of request timeout"""
     mock_post.side_effect = Exception("Connection timeout")
 
-    response = client.post(
-        "/forecast?product_id=Cat1&horizon=14", headers={"X-API-Key": VALID_TEST_KEY}
-    )
+    response = client.post("/forecast?product_id=Cat1&horizon=14", headers={"X-API-Key": VALID_TEST_KEY})
 
     assert response.status_code == 503
 

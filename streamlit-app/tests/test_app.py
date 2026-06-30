@@ -19,9 +19,7 @@ def test_calculate_stock_recommendation():
     forecast = [10, 12, 11, 13, 10, 12, 11, 13, 10, 12, 11, 13, 10, 12]
 
     # Test with default parameters
-    result = calculate_stock_recommendation(
-        forecast, lead_time_days=14, safety_factor=1.2
-    )
+    result = calculate_stock_recommendation(forecast, lead_time_days=14, safety_factor=1.2)
 
     expected_lead_time_demand = sum(forecast[:14])  # 160
     expected_recommended = int(expected_lead_time_demand * 1.2)  # 192
@@ -35,9 +33,7 @@ def test_calculate_stock_recommendation_custom_lead_time():
 
     forecast = [10] * 30  # 30 days of 10 units/day
 
-    result = calculate_stock_recommendation(
-        forecast, lead_time_days=7, safety_factor=1.5
-    )
+    result = calculate_stock_recommendation(forecast, lead_time_days=7, safety_factor=1.5)
 
     expected_lead_time_demand = 10 * 7  # 70
     expected_recommended = int(70 * 1.5)  # 105
@@ -53,9 +49,7 @@ def test_get_forecast_success(mock_post):
     # Mock successful response
     mock_response = MagicMock()
     mock_response.status_code = 200
-    mock_response.json.return_value = {
-        "predictions": [{"AutoETS": 45.2}, {"AutoETS": 43.8}, {"AutoETS": 44.1}]
-    }
+    mock_response.json.return_value = {"predictions": [{"AutoETS": 45.2}, {"AutoETS": 43.8}, {"AutoETS": 44.1}]}
     mock_post.return_value = mock_response
 
     # Mock Streamlit secrets

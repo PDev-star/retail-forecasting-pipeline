@@ -22,9 +22,7 @@ app.add_middleware(
 )
 
 # Config from environment variables (set in Render.com)
-DATABRICKS_HOST = os.environ.get(
-    "DATABRICKS_HOST", "https://dbc-7e8a8bf0-dc9f.cloud.databricks.com"
-)
+DATABRICKS_HOST = os.environ.get("DATABRICKS_HOST", "https://dbc-7e8a8bf0-dc9f.cloud.databricks.com")
 DATABRICKS_TOKEN = os.environ.get("DATABRICKS_TOKEN")
 VALID_API_KEYS = set(os.environ.get("API_KEYS", "demo-key-12345").split(","))
 
@@ -64,9 +62,7 @@ async def list_products():
 
 
 @app.post("/forecast")
-async def get_forecast(
-    product_id: str, horizon: int = 14, api_key: str = Header(..., alias="X-API-Key")
-):
+async def get_forecast(product_id: str, horizon: int = 14, api_key: str = Header(..., alias="X-API-Key")):
     """Get demand forecast for a product"""
     verify_api_key(api_key)
 

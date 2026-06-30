@@ -112,9 +112,7 @@ product = PRODUCTS[selected_category]
 
 # Forecast Horizon
 st.sidebar.markdown("### Forecast Parameters")
-horizon = st.sidebar.slider(
-    "Forecast Horizon (days)", min_value=7, max_value=90, value=30, step=7
-)
+horizon = st.sidebar.slider("Forecast Horizon (days)", min_value=7, max_value=90, value=30, step=7)
 
 # What-If Scenarios
 st.sidebar.markdown("---")
@@ -198,10 +196,7 @@ if "forecast" in st.session_state:
         st.info(f"**Scenario:** {scenario_desc}")
 
         # Prepare data for chart
-        dates = [
-            (datetime.now() + timedelta(days=i)).strftime("%Y-%m-%d")
-            for i in range(1, horizon + 1)
-        ]
+        dates = [(datetime.now() + timedelta(days=i)).strftime("%Y-%m-%d") for i in range(1, horizon + 1)]
         df_forecast = pd.DataFrame({"Date": dates, "Predicted Demand": forecast})
 
         # Create interactive Plotly chart
@@ -274,9 +269,7 @@ if "forecast" in st.session_state:
         df_display["Cumulative Demand"] = df_display["Predicted Demand"].cumsum()
 
         st.dataframe(
-            df_display.style.format(
-                {"Predicted Demand": "{:.1f}", "Cumulative Demand": "{:.0f}"}
-            ),
+            df_display.style.format({"Predicted Demand": "{:.1f}", "Cumulative Demand": "{:.0f}"}),
             use_container_width=True,
             height=400,
         )
@@ -286,7 +279,7 @@ if "forecast" in st.session_state:
         st.download_button(
             label="📥 Download Forecast as CSV",
             data=csv,
-            file_name=f"{product['sku']}_forecast_{datetime.now().strftime('%Y%m%d')}.csv",
+            file_name=f"{product['sku']}forecast_{datetime.now().strftime('%Y%m%d')}.csv",
             mime="text/csv",
         )
 
@@ -428,9 +421,7 @@ else:
     # ========================================================================
     # WELCOME SCREEN (no forecast yet)
     # ========================================================================
-    st.info(
-        "👆 Select a product and forecast horizon from the sidebar, then click 'Generate Forecast' to begin."
-    )
+    st.info("👆 Select a product and forecast horizon from the sidebar, then click 'Generate Forecast' to begin.")
 
     st.markdown(
         """
@@ -462,6 +453,4 @@ else:
 # FOOTER
 # ============================================================================
 st.markdown("---")
-st.caption(
-    "🚀 InventoryForge v1.0 | Built for Impact pSiddhi S2-D-02 | Powered by Databricks + Streamlit"
-)
+st.caption("🚀 InventoryForge v1.0 | Built for Impact pSiddhi S2-D-02 | Powered by Databricks + Streamlit")
