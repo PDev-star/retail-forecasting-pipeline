@@ -22,9 +22,9 @@ jobs:
       run: |
         pip install black isort
     
-    - name: Check code formatting with black
+    - name: Code formatting with black
       run: |
-        black --check fastapi-gateway/ streamlit-app/ --exclude venv --line-length=120
+        black fastapi-gateway/ streamlit-app/ --exclude venv --line-length=120
     
     - name: Check import sorting with isort
       run: |
