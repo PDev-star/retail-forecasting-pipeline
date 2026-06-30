@@ -1,8 +1,6 @@
 name: Linting
 
 on:
-  push:
-    branches: [ main, develop, GitConnectionTest ]
   pull_request:
     branches: [ main ]
 
@@ -22,9 +20,9 @@ jobs:
       run: |
         pip install black isort
     
-    - name: Code formatting with black
+    - name: Check code formatting with black
       run: |
-        black fastapi-gateway/ streamlit-app/ --exclude venv --line-length=120
+        black --check fastapi-gateway/ streamlit-app/ --exclude venv --line-length=120
     
     - name: Check import sorting with isort
       run: |
