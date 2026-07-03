@@ -1,9 +1,8 @@
-# test_app.py - Unit tests for Streamlit App
-import os
-import sys
-from unittest.mock import MagicMock, patch
-
+# test_app.py - Unit tests for Streamlit App (FastAPI Proxy Architecture)
 import pytest
+from unittest.mock import patch, MagicMock
+import sys
+import os
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -44,55 +43,150 @@ def test_calculate_stock_recommendation_custom_lead_time():
 
 @patch("app.requests.post")
 def test_get_forecast_success(mock_post):
-    """Test successful forecast API call"""
+    """Test successful forecast API call via FastAPI gateway"""
     from app import get_forecast
 
-    # Mock successful response
+    # Mock FastAPI response format (NEW!)
     mock_response = MagicMock()
     mock_response.status_code = 200
-    mock_response.json.return_value = {"predictions": [{"AutoETS": 45.2}, {"AutoETS": 43.8}, {"AutoETS": 44.1}]}
+    mock_response.json.return_value = {
+        "success": True,
+        "product": {"id": "Cat1", "name": "WHITE HANGING HEART T-LIGHT HOLDER"},
+        "forecast": {"horizon_days": 14, "values": [45.2, 43.8, 44.1]},
+        "generated_at": "2026-07-03T10:30:00Z",
+    }
     mock_post.return_value = mock_response
 
-    # Mock Streamlit secrets
-    with patch("app.st.secrets", {"databricks_token": "test-token"}):
-        result = get_forecast("Cat1Forecast", 14)
+    # Mock Streamlit secrets (NEW: api_key instead of databricks_token)
+    with patch("app.st.secrets", {"api_key": "test-api-key", "fastapi_url": "http://localhost:8000"}):
+        result = get_forecast("Cat1", 14)
 
+    # Verify result
     assert result is not None
     assert len(result) == 3
     assert result[0] == 45.2
+    assert result[1] == 43.8
+    assert result[2] == 44.1
+
+    # Verify correct API call was made
+    mock_post.assert_called_once()
+    call_args = mock_post.call_args
+    
+    # Check URL (FastAPI, not Databricks)
+    assert "forecast" in call_args[0][0]  # URL contains /forecast
+    
+    # Check headers (X-API-Key, not Authorization)
+    assert "X-API-Key" in call_args[1]["headers"]
+    assert call_args[1]["headers"]["X-API-Key"] == "test-api-key"
+    
+    # Check params (product_id and horizon)
+    assert call_args[1]["params"]["product_id"] == "Cat1"
+    assert call_args[1]["params"]["horizon"] == 14
+
+
+@patch("app.requests.post")
+def test_get_forecast_invalid_api_key(mock_post):
+    """Test forecast API with invalid API key (401)"""
+    from app import get_forecast
+
+    # Mock 401 Unauthorized response
+    mock_response = MagicMock()
+    mock_response.status_code = 401
+    mock_response.text = "Invalid API key"
+    mock_post.return_value = mock_response
+
+    with patch("app.st.secrets", {"api_key": "invalid-key", "fastapi_url": "http://localhost:8000"}):
+        with patch("app.st.error"):  # Mock st.error to avoid errors
+            result = get_forecast("Cat1", 14)
+
+    assert result is None
+
+
+@patch("app.requests.post")
+def test_get_forecast_product_not_found(mock_post):
+    """Test forecast API with non-existent product (404)"""
+    from app import get_forecast
+
+    # Mock 404 Not Found response
+    mock_response = MagicMock()
+    mock_response.status_code = 404
+    mock_response.text = "Product not found"
+    mock_post.return_value = mock_response
+
+    with patch("app.st.secrets", {"api_key": "test-key", "fastapi_url": "http://localhost:8000"}):
+        with patch("app.st.error"):
+            result = get_forecast("InvalidProduct", 14)
+
+    assert result is None
 
 
 @patch("app.requests.post")
 def test_get_forecast_api_error(mock_post):
-    """Test forecast API error handling"""
+    """Test forecast API error handling (502)"""
     from app import get_forecast
 
-    # Mock error response
+    # Mock 502 Bad Gateway response
     mock_response = MagicMock()
-    mock_response.status_code = 500
-    mock_response.text = "Server error"
+    mock_response.status_code = 502
+    mock_response.text = "Bad Gateway"
     mock_post.return_value = mock_response
 
-    with patch("app.st.secrets", {"databricks_token": "test-token"}):
-        with patch("app.st.error"):  # Mock st.error to avoid errors
-            result = get_forecast("Cat1Forecast", 14)
+    with patch("app.st.secrets", {"api_key": "test-key", "fastapi_url": "http://localhost:8000"}):
+        with patch("app.st.error"):
+            result = get_forecast("Cat1", 14)
+
+    assert result is None
+
+
+@patch("app.requests.post")
+def test_get_forecast_connection_error(mock_post):
+    """Test forecast API connection error handling"""
+    from app import get_forecast
+    import requests
+
+    # Mock connection error
+    mock_post.side_effect = requests.exceptions.ConnectionError("Cannot connect to FastAPI")
+
+    with patch("app.st.secrets", {"api_key": "test-key", "fastapi_url": "http://localhost:8000"}):
+        with patch("app.st.error"):
+            result = get_forecast("Cat1", 14)
 
     assert result is None
 
 
 def test_products_config():
-    """Test products configuration"""
+    """Test products configuration (NEW: product_id instead of endpoint)"""
     from app import PRODUCTS
 
     assert "Cat1" in PRODUCTS
     assert "Cat2" in PRODUCTS
-    assert PRODUCTS["Cat1"]["endpoint"] == "Cat1Forecast"
-    assert PRODUCTS["Cat2"]["endpoint"] == "Cat2Forecast"
+    
+    # Check for product_id field (not endpoint)
+    assert PRODUCTS["Cat1"]["product_id"] == "Cat1"
+    assert PRODUCTS["Cat2"]["product_id"] == "Cat2"
+    
+    # Verify names
+    assert PRODUCTS["Cat1"]["name"] == "WHITE HANGING HEART T-LIGHT HOLDER"
+    assert PRODUCTS["Cat2"]["name"] == "JUMBO BAG RED RETROSPOT"
 
 
-def test_databricks_host_config():
-    """Test Databricks host configuration"""
-    from app import DATABRICKS_HOST
+def test_fastapi_url_config():
+    """Test FastAPI URL configuration (NEW: replaces test_databricks_host_config)"""
+    from app import FASTAPI_URL
 
-    assert DATABRICKS_HOST.startswith("https://")
-    assert "databricks.com" in DATABRICKS_HOST
+    # Should be configured (either from secrets or default)
+    assert FASTAPI_URL is not None
+    assert isinstance(FASTAPI_URL, str)
+    
+    # Should be a valid URL format
+    assert FASTAPI_URL.startswith("http://") or FASTAPI_URL.startswith("https://")
+
+
+def test_api_key_config():
+    """Test API key configuration (NEW)"""
+    from app import API_KEY
+
+    # Should be configured (either from secrets or default)
+    assert API_KEY is not None
+    assert isinstance(API_KEY, str)
+    assert len(API_KEY) > 0

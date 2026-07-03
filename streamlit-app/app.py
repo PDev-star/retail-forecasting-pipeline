@@ -1,12 +1,13 @@
 # app.py - Retail Forecasting Streamlit App
 # Deploy to Streamlit Community Cloud
 
-from datetime import datetime, timedelta
-
+import streamlit as st
+import requests
 import pandas as pd
 import plotly.graph_objects as go
-import requests
-import streamlit as st
+from datetime import datetime, timedelta
+import threading
+import time
 
 # Page configuration
 st.set_page_config(
@@ -17,66 +18,118 @@ st.set_page_config(
 )
 
 # ============================================================================
-# CONFIGURATION - Update these with your Databricks workspace details
+# CONFIGURATION - FastAPI Gateway (SECURE PROXY PATTERN)
 # ============================================================================
 
-DATABRICKS_HOST = "https://dbc-7e8a8bf0-dc9f.cloud.databricks.com"
-# Token is stored in Streamlit secrets (NOT in code!)
-DATABRICKS_TOKEN = st.secrets["databricks_token"]
+# FastAPI Gateway URL (deployed on Render.com or similar)
+# This proxies requests to Databricks, so we DON'T need Databricks credentials here!
+FASTAPI_URL = st.secrets.get("fastapi_url", "http://localhost:8000")
+API_KEY = st.secrets.get("api_key", "demo-key-12345")
 
-# Product catalog - maps to your Model Serving endpoints
+# Product catalog - maps to FastAPI product IDs
 PRODUCTS = {
     "Cat1": {
         "name": "WHITE HANGING HEART T-LIGHT HOLDER",
         "sku": "85123A",
-        "endpoint": "Cat1Forecast",
+        "product_id": "Cat1",  # FastAPI uses product_id instead of endpoint
         "color": "#FF6B6B",
     },
     "Cat2": {
         "name": "JUMBO BAG RED RETROSPOT",
         "sku": "22423",
-        "endpoint": "Cat2Forecast",
+        "product_id": "Cat2",
         "color": "#4ECDC4",
     },
 }
+
+# ============================================================================
+# KEEP-ALIVE MECHANISM (Render.com Free Tier)
+# ============================================================================
+
+def keep_fastapi_warm():
+    """
+    Background thread that pings FastAPI every 10 minutes to prevent spin-down.
+    
+    Render.com free tier spins down after 15 minutes of inactivity.
+    This keeps it awake so users don't experience 30-60s cold starts.
+    """
+    while True:
+        try:
+            # Ping the health endpoint
+            response = requests.get(f"{FASTAPI_URL}/health", timeout=5)
+            if response.status_code == 200:
+                print(f"✓ FastAPI keep-alive ping successful at {datetime.now()}")
+            else:
+                print(f"⚠ FastAPI ping returned {response.status_code}")
+        except Exception as e:
+            print(f"✗ FastAPI ping failed: {str(e)}")
+        
+        # Wait 10 minutes before next ping
+        time.sleep(600)  # 600 seconds = 10 minutes
+
+
+# Start keep-alive thread only for deployed app (not localhost)
+if FASTAPI_URL != "http://localhost:8000":
+    if "keep_alive_started" not in st.session_state:
+        st.session_state.keep_alive_started = True
+        ping_thread = threading.Thread(target=keep_fastapi_warm, daemon=True)
+        ping_thread.start()
+        print(f"🚀 Keep-alive thread started for {FASTAPI_URL}")
 
 # ============================================================================
 # API FUNCTIONS
 # ============================================================================
 
 
-def get_forecast(endpoint_name, horizon):
+def get_forecast(product_id, horizon):
     """
-    Call Databricks Model Serving endpoint to get forecast.
+    Call FastAPI Gateway to get forecast.
 
-    This function calls your deployed Model Serving endpoints (Cat1Forecast, Cat2Forecast)
-    which internally access Delta Lake and return predictions.
+    This function calls the FastAPI gateway which:
+    1. Validates the API key
+    2. Proxies the request to Databricks Model Serving
+    3. Returns the forecast
 
-    NO direct Delta Lake connection needed here!
+    Benefits:
+    - NO Databricks credentials needed in Streamlit!
+    - API key-based authentication (secure for public apps)
+    - Rate limiting and monitoring at gateway level
+    - Decouples frontend from Databricks infrastructure
     """
     try:
         response = requests.post(
-            f"{DATABRICKS_HOST}/serving-endpoints/{endpoint_name}/invocations",
+            f"{FASTAPI_URL}/forecast",
             headers={
-                "Authorization": f"Bearer {DATABRICKS_TOKEN}",
+                "X-API-Key": API_KEY,
                 "Content-Type": "application/json",
             },
-            json={"dataframe_records": [{"h": horizon}]},
+            params={
+                "product_id": product_id,
+                "horizon": horizon,
+            },
             timeout=60,
         )
 
         if response.status_code == 200:
             data = response.json()
-            predictions = data["predictions"]
-            # Extract AutoETS forecast values
-            forecast_values = [pred["AutoETS"] for pred in predictions]
+            # Extract forecast values from FastAPI response
+            forecast_values = data["forecast"]["values"]
             return forecast_values
+        elif response.status_code == 401:
+            st.error("🔒 Invalid API key. Please check your credentials.")
+            return None
+        elif response.status_code == 404:
+            st.error(f"❌ Product '{product_id}' not found.")
+            return None
         else:
             st.error(f"API Error: {response.status_code} - {response.text}")
             return None
 
+    except requests.exceptions.ConnectionError:
+        st.error(f"🔌 Cannot connect to FastAPI Gateway at {FASTAPI_URL}. Is the server running?")
+        return None
     except Exception as e:
-        st.error(f"Error calling endpoint: {str(e)}")
+        st.error(f"Error calling FastAPI: {str(e)}")
         return None
 
 
@@ -151,8 +204,8 @@ st.markdown("---")
 
 # Fetch forecast button
 if st.button("🔮 Generate Forecast", type="primary", use_container_width=True):
-    with st.spinner(f"Fetching {horizon}-day forecast from ML model..."):
-        forecast = get_forecast(product["endpoint"], horizon)
+    with st.spinner(f"Fetching {horizon}-day forecast via FastAPI Gateway..."):
+        forecast = get_forecast(product["product_id"], horizon)
 
         if forecast:
             # Apply scenario adjustment
@@ -280,7 +333,7 @@ if "forecast" in st.session_state:
         st.download_button(
             label="📥 Download Forecast as CSV",
             data=csv,
-            file_name=f"{product['sku']}forecast_{datetime.now().strftime('%Y%m%d')}.csv",
+            file_name=f"{product['sku']}_forecast_{datetime.now().strftime('%Y%m%d')}.csv",
             mime="text/csv",
         )
 
@@ -439,9 +492,10 @@ else:
     - **Data Storage:** Databricks Delta Lake
     - **ML Models:** AutoETS + Prophet (tracked in MLflow)
     - **Model Serving:** Databricks Model Serving endpoints
-    - **This App:** Streamlit (calls endpoints via REST API)
+    - **API Gateway:** FastAPI proxy (keeps warm via 10-min pings)
+    - **This App:** Streamlit (calls FastAPI gateway via REST API)
     
-    **No direct Delta Lake connection needed!** The Model Serving endpoints handle all data access.
+    **Secure & Scalable:** No Databricks credentials in frontend. All access via API key.
     """)
 
 # ============================================================================

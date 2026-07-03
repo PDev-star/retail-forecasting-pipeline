@@ -15,16 +15,46 @@ jobs:
     
     - name: Staging Deployment Notice
       run: |
-        echo "🔧 Staging deployment"
+        echo "🔧 Deploying to Staging Environment"
         echo "Branch: ${{ github.ref }}"
-        echo ""
-        echo " Streamlit will auto-deploy from this branch"
-        echo " Render will auto-deploy from this branch"
-        echo ""
-        echo "Deployment timeline:"
-        echo "  • Streamlit: 3-5 minutes"
-        echo "  • Render: 5-8 minutes"
+        echo "Commit: ${{ github.sha }}"
     
-    - name: Run Tests First
-      run: echo "Tests must pass before staging deployment"
-
+    - name: Deploy Streamlit Dev App
+      if: ${{ github.event_name == 'push' }}
+      env:
+        STREAMLIT_DEPLOY_HOOK: ${{ secrets.STREAMLIT_DEV_DEPLOY_HOOK }}
+      run: |
+        if [ -z "$STREAMLIT_DEPLOY_HOOK" ]; then
+          echo "⚠️  STREAMLIT_DEV_DEPLOY_HOOK secret not set"
+          echo "   Streamlit will auto-deploy when it detects push"
+          echo "   To manually trigger, add deploy hook to GitHub secrets"
+        else
+          echo "🚀 Triggering Streamlit dev deployment..."
+          curl -X POST "$STREAMLIT_DEPLOY_HOOK"
+          echo "✅ Streamlit dev deployment triggered"
+        fi
+    
+    - name: Deploy FastAPI Dev Service
+      if: ${{ github.event_name == 'push' }}
+      env:
+        RENDER_DEV_DEPLOY_HOOK: ${{ secrets.RENDER_DEV_DEPLOY_HOOK }}
+      run: |
+        if [ -z "$RENDER_DEV_DEPLOY_HOOK" ]; then
+          echo "⚠️  RENDER_DEV_DEPLOY_HOOK secret not set"
+          echo "   Render will auto-deploy when it detects push"
+          echo "   To manually trigger, add deploy hook to GitHub secrets"
+        else
+          echo "🚀 Triggering Render dev deployment..."
+          curl -X POST "$RENDER_DEV_DEPLOY_HOOK"
+          echo "✅ Render dev deployment triggered"
+        fi
+    
+    - name: Deployment Summary
+      if: ${{ github.event_name == 'push' }}
+      run: |
+        echo ""
+        echo "📦 Deployment Status:"
+        echo "  • Streamlit Dev: https://retail-forecasting-pipeline-dev.streamlit.app"
+        echo "  • FastAPI Dev: (check Render dashboard)"
+        echo ""
+        echo "⏱️  Expected deployment time: 3-8 minutes"

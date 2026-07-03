@@ -6,38 +6,58 @@ on:
   workflow_dispatch:  # Allows manual trigger
 
 jobs:
-  deploy-notification:
+  deploy-production:
     runs-on: ubuntu-latest
     
     steps:
     - uses: actions/checkout@v4
     
-    - name: Notify Deployment Start
+    - name: Production Deployment Notice
       run: |
-        echo " Deployment triggered!"
+        echo "🚀 Deploying to Production Environment"
         echo "Branch: ${{ github.ref }}"
         echo "Commit: ${{ github.sha }}"
         echo "Author: ${{ github.actor }}"
     
-    - name: Wait for Tests to Complete
-      run: echo "Tests completed successfully in previous jobs"
-    
-    - name: Streamlit Auto-Deploy Info
+    - name: Deploy Streamlit Production App
+      env:
+        STREAMLIT_PROD_DEPLOY_HOOK: ${{ secrets.STREAMLIT_PROD_DEPLOY_HOOK }}
       run: |
-        echo " Streamlit Cloud will auto-deploy from this branch"
-        echo " App URL: https://retail-forecasting-YOUR_USERNAME.streamlit.app"
-        echo "  Deployment takes ~2-5 minutes"
+        if [ -z "$STREAMLIT_PROD_DEPLOY_HOOK" ]; then
+          echo "⚠️  STREAMLIT_PROD_DEPLOY_HOOK secret not set"
+          echo "   Streamlit will auto-deploy when it detects push to main"
+          echo "   To manually trigger, add deploy hook to GitHub secrets"
+        else
+          echo "🚀 Triggering Streamlit production deployment..."
+          curl -X POST "$STREAMLIT_PROD_DEPLOY_HOOK"
+          echo "✅ Streamlit production deployment triggered"
+        fi
     
-    - name: Render Auto-Deploy Info
+    - name: Deploy FastAPI Production Service
+      env:
+        RENDER_PROD_DEPLOY_HOOK: ${{ secrets.RENDER_PROD_DEPLOY_HOOK }}
       run: |
-        echo " Render.com will auto-deploy from this branch"
-        echo " API URL: https://retail-forecast-api.onrender.com"
-        echo " Deployment takes ~5-10 minutes"
+        if [ -z "$RENDER_PROD_DEPLOY_HOOK" ]; then
+          echo "⚠️  RENDER_PROD_DEPLOY_HOOK secret not set"
+          echo "   Render will auto-deploy when it detects push to main"
+          echo "   To manually trigger, add deploy hook to GitHub secrets"
+        else
+          echo "🚀 Triggering Render production deployment..."
+          curl -X POST "$RENDER_PROD_DEPLOY_HOOK"
+          echo "✅ Render production deployment triggered"
+        fi
     
-    - name: Deployment Complete
+    - name: Deployment Summary
       run: |
-        echo "Deployment initiated successfully!"
-        echo "Monitor deployments at:"
-        echo "  - Streamlit: https://share.streamlit.io"
-        echo "  - Render: https://dashboard.render.com"
-
+        echo ""
+        echo "🎉 Production Deployment Initiated!"
+        echo ""
+        echo "📦 Monitor deployments at:"
+        echo "  • Streamlit: https://share.streamlit.io"
+        echo "  • Render: https://dashboard.render.com"
+        echo ""
+        echo "⏱️  Expected deployment time: 5-10 minutes"
+        echo ""
+        echo "🔍 Verify deployment:"
+        echo "  • Streamlit App: https://retail-forecasting-pipeline.streamlit.app"
+        echo "  • FastAPI Docs: https://your-api.onrender.com/docs"
