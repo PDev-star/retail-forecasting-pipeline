@@ -1,8 +1,9 @@
 # test_app.py - Unit tests for Streamlit App (FastAPI Proxy Architecture)
-import pytest
-from unittest.mock import patch, MagicMock
-import sys
 import os
+import sys
+from unittest.mock import MagicMock, patch
+
+import pytest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -71,14 +72,14 @@ def test_get_forecast_success(mock_post):
     # Verify correct API call was made
     mock_post.assert_called_once()
     call_args = mock_post.call_args
-    
+
     # Check URL (FastAPI, not Databricks)
     assert "forecast" in call_args[0][0]  # URL contains /forecast
-    
+
     # Check headers (X-API-Key, not Authorization)
     assert "X-API-Key" in call_args[1]["headers"]
     assert call_args[1]["headers"]["X-API-Key"] == "test-api-key"
-    
+
     # Check params (product_id and horizon)
     assert call_args[1]["params"]["product_id"] == "Cat1"
     assert call_args[1]["params"]["horizon"] == 14
@@ -141,8 +142,8 @@ def test_get_forecast_api_error(mock_post):
 @patch("app.requests.post")
 def test_get_forecast_connection_error(mock_post):
     """Test forecast API connection error handling"""
-    from app import get_forecast
     import requests
+    from app import get_forecast
 
     # Mock connection error
     mock_post.side_effect = requests.exceptions.ConnectionError("Cannot connect to FastAPI")
@@ -160,11 +161,11 @@ def test_products_config():
 
     assert "Cat1" in PRODUCTS
     assert "Cat2" in PRODUCTS
-    
+
     # Check for product_id field (not endpoint)
     assert PRODUCTS["Cat1"]["product_id"] == "Cat1"
     assert PRODUCTS["Cat2"]["product_id"] == "Cat2"
-    
+
     # Verify names
     assert PRODUCTS["Cat1"]["name"] == "WHITE HANGING HEART T-LIGHT HOLDER"
     assert PRODUCTS["Cat2"]["name"] == "JUMBO BAG RED RETROSPOT"
@@ -177,7 +178,7 @@ def test_fastapi_url_config():
     # Should be configured (either from secrets or default)
     assert FASTAPI_URL is not None
     assert isinstance(FASTAPI_URL, str)
-    
+
     # Should be a valid URL format
     assert FASTAPI_URL.startswith("http://") or FASTAPI_URL.startswith("https://")
 

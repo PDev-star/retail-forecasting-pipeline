@@ -1,13 +1,14 @@
 # app.py - Retail Forecasting Streamlit App
 # Deploy to Streamlit Community Cloud
 
-import streamlit as st
-import requests
-import pandas as pd
-import plotly.graph_objects as go
-from datetime import datetime, timedelta
 import threading
 import time
+from datetime import datetime, timedelta
+
+import pandas as pd
+import plotly.graph_objects as go
+import requests
+import streamlit as st
 
 # Page configuration
 st.set_page_config(
@@ -46,10 +47,11 @@ PRODUCTS = {
 # KEEP-ALIVE MECHANISM (Render.com Free Tier)
 # ============================================================================
 
+
 def keep_fastapi_warm():
     """
     Background thread that pings FastAPI every 10 minutes to prevent spin-down.
-    
+
     Render.com free tier spins down after 15 minutes of inactivity.
     This keeps it awake so users don't experience 30-60s cold starts.
     """
@@ -63,7 +65,7 @@ def keep_fastapi_warm():
                 print(f"⚠ FastAPI ping returned {response.status_code}")
         except Exception as e:
             print(f"✗ FastAPI ping failed: {str(e)}")
-        
+
         # Wait 10 minutes before next ping
         time.sleep(600)  # 600 seconds = 10 minutes
 
