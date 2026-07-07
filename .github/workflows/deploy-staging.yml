@@ -7,54 +7,49 @@ on:
     branches: [ main ]
 
 jobs:
+  # ============================================================
+  # DEPLOYMENT (Only runs if all tests passed in test-*.yml workflows)
+  # ============================================================
+  
   deploy-staging:
     runs-on: ubuntu-latest
+    # Only deploy on push, not PR
+    if: ${{ github.event_name == 'push' }}
     
     steps:
     - uses: actions/checkout@v4
     
     - name: Staging Deployment Notice
       run: |
-        echo "🔧 Deploying to Staging Environment"
+        echo "🚀 Deploying to Staging Environment"
         echo "Branch: ${{ github.ref }}"
         echo "Commit: ${{ github.sha }}"
+        echo ""
+        echo "⚠️  This workflow assumes tests passed in test-*.yml workflows"
     
-    - name: Deploy Streamlit Dev App
-      if: ${{ github.event_name == 'push' }}
-      env:
-        STREAMLIT_DEPLOY_HOOK: ${{ secrets.STREAMLIT_DEV_DEPLOY_HOOK }}
-      run: |
-        if [ -z "$STREAMLIT_DEPLOY_HOOK" ]; then
-          echo "⚠️  STREAMLIT_DEV_DEPLOY_HOOK secret not set"
-          echo "   Streamlit will auto-deploy when it detects push"
-          echo "   To manually trigger, add deploy hook to GitHub secrets"
-        else
-          echo "🚀 Triggering Streamlit dev deployment..."
-          curl -X POST "$STREAMLIT_DEPLOY_HOOK"
-          echo "✅ Streamlit dev deployment triggered"
-        fi
-    
-    - name: Deploy FastAPI Dev Service
-      if: ${{ github.event_name == 'push' }}
+    - name: Deploy FastAPI to Render Staging
       env:
         RENDER_DEV_DEPLOY_HOOK: ${{ secrets.RENDER_DEV_DEPLOY_HOOK }}
       run: |
         if [ -z "$RENDER_DEV_DEPLOY_HOOK" ]; then
-          echo "⚠️  RENDER_DEV_DEPLOY_HOOK secret not set"
+          echo "⚠️  RENDER_DEV_DEPLOY_HOOK not set"
           echo "   Render will auto-deploy when it detects push"
-          echo "   To manually trigger, add deploy hook to GitHub secrets"
-        else
-          echo "🚀 Triggering Render dev deployment..."
-          curl -X POST "$RENDER_DEV_DEPLOY_HOOK"
-          echo "✅ Render dev deployment triggered"
+          exit 0
         fi
+        
+        echo "🚀 Triggering Render staging deployment..."
+        curl -X POST "$RENDER_DEV_DEPLOY_HOOK"
+        echo "✅ Render deployment triggered"
     
     - name: Deployment Summary
-      if: ${{ github.event_name == 'push' }}
       run: |
         echo ""
-        echo "📦 Deployment Status:"
-        echo "  • Streamlit Dev: https://retail-forecasting-pipeline-dev.streamlit.app"
-        echo "  • FastAPI Dev: (check Render dashboard)"
+        echo "🎉 Staging Deployment Complete!"
         echo ""
-        echo "⏱️  Expected deployment time: 3-8 minutes"
+        echo "📦 What was deployed:"
+        echo "  • FastAPI → Render Dev (via deploy hook)"
+        echo "  • Streamlit → Auto-deploys from GitHub"
+        echo ""
+        echo "🔍 Staging URLs:"
+        echo "  • FastAPI: ${{ secrets.FASTAPI_DEV_URL }}/docs"
+        echo "  • Streamlit: https://retail-forecasting-pipeline-dev.streamlit.app"

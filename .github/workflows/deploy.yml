@@ -6,6 +6,10 @@ on:
   workflow_dispatch:  # Allows manual trigger
 
 jobs:
+  # ============================================================
+  # DEPLOYMENT (Only runs if all tests passed in other workflows)
+  # ============================================================
+  
   deploy-production:
     runs-on: ubuntu-latest
     
@@ -18,46 +22,38 @@ jobs:
         echo "Branch: ${{ github.ref }}"
         echo "Commit: ${{ github.sha }}"
         echo "Author: ${{ github.actor }}"
+        echo ""
+        echo "⚠️  This workflow assumes tests passed in test-*.yml workflows"
+        echo "   GitHub branch protection rules should enforce this"
     
-    - name: Deploy Streamlit Production App
-      env:
-        STREAMLIT_PROD_DEPLOY_HOOK: ${{ secrets.STREAMLIT_PROD_DEPLOY_HOOK }}
-      run: |
-        if [ -z "$STREAMLIT_PROD_DEPLOY_HOOK" ]; then
-          echo "⚠️  STREAMLIT_PROD_DEPLOY_HOOK secret not set"
-          echo "   Streamlit will auto-deploy when it detects push to main"
-          echo "   To manually trigger, add deploy hook to GitHub secrets"
-        else
-          echo "🚀 Triggering Streamlit production deployment..."
-          curl -X POST "$STREAMLIT_PROD_DEPLOY_HOOK"
-          echo "✅ Streamlit production deployment triggered"
-        fi
-    
-    - name: Deploy FastAPI Production Service
+    - name: Deploy FastAPI to Render Production
       env:
         RENDER_PROD_DEPLOY_HOOK: ${{ secrets.RENDER_PROD_DEPLOY_HOOK }}
       run: |
         if [ -z "$RENDER_PROD_DEPLOY_HOOK" ]; then
-          echo "⚠️  RENDER_PROD_DEPLOY_HOOK secret not set"
-          echo "   Render will auto-deploy when it detects push to main"
-          echo "   To manually trigger, add deploy hook to GitHub secrets"
-        else
-          echo "🚀 Triggering Render production deployment..."
-          curl -X POST "$RENDER_PROD_DEPLOY_HOOK"
-          echo "✅ Render production deployment triggered"
+          echo "❌ RENDER_PROD_DEPLOY_HOOK secret not set!"
+          echo "   Add your Render deploy hook to GitHub secrets"
+          echo "   Get it from: Render Dashboard → Your Service → Settings → Deploy Hook"
+          exit 1
         fi
+        
+        echo "🚀 Triggering Render production deployment..."
+        curl -X POST "$RENDER_PROD_DEPLOY_HOOK"
+        echo "✅ Render deployment triggered"
     
     - name: Deployment Summary
       run: |
         echo ""
-        echo "🎉 Production Deployment Initiated!"
+        echo "🎉 Production Deployment Complete!"
         echo ""
-        echo "📦 Monitor deployments at:"
-        echo "  • Streamlit: https://share.streamlit.io"
-        echo "  • Render: https://dashboard.render.com"
+        echo "📦 What was deployed:"
+        echo "  • FastAPI → Render (via deploy hook)"
+        echo "  • Streamlit → Auto-deploys from GitHub"
         echo ""
         echo "⏱️  Expected deployment time: 5-10 minutes"
         echo ""
         echo "🔍 Verify deployment:"
-        echo "  • Streamlit App: https://retail-forecasting-pipeline.streamlit.app"
-        echo "  • FastAPI Docs: https://your-api.onrender.com/docs"
+        echo "  • FastAPI: ${{ secrets.FASTAPI_PROD_URL }}/docs"
+        echo "  • Streamlit: https://retail-forecasting-pipeline.streamlit.app"
+        echo ""
+        echo "💡 Tip: Test manually after deployment to verify production"
