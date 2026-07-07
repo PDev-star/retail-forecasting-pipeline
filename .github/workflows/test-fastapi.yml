@@ -26,7 +26,7 @@ jobs:
       run: |
         cd fastapi-gateway
         pip install -r requirements.txt
-        pip install pytest pytest-cov
+        pip install -r requirements-dev.txt
     
     - name: Run FastAPI unit tests
       run: |

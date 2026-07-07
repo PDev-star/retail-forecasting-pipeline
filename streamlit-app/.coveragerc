@@ -1,0 +1,38 @@
+[run]
+source = .
+omit =
+    */tests/*
+    */test_*.py
+    */__pycache__/*
+    */venv/*
+    */env/*
+
+[report]
+# Exclude lines that can't be tested
+exclude_lines =
+    # Standard pragmas
+    pragma: no cover
+    
+    # Defensive programming
+    def __repr__
+    raise AssertionError
+    raise NotImplementedError
+    
+    # Streamlit UI code (protected by pytest guard)
+    if 'pytest' not in sys.modules:
+    
+    # Main block
+    if __name__ == .__main__.:
+    
+    # Type checking
+    if TYPE_CHECKING:
+    
+    # Debug code
+    if settings.DEBUG
+    
+precision = 2
+show_missing = True
+skip_covered = False
+
+[html]
+directory = htmlcov
