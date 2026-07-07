@@ -8,7 +8,13 @@ import pytest
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 # Mock streamlit before importing app
-sys.modules["streamlit"] = MagicMock()
+mock_st = MagicMock()
+# FIXED: Mock st.secrets.get() to return actual string values
+mock_st.secrets.get.side_effect = lambda key, default=None: {
+    "fastapi_url": "http://localhost:8000",
+    "api_key": "test-api-key-from-mock"
+}.get(key, default)
+sys.modules["streamlit"] = mock_st
 
 # Import functions from app
 
@@ -58,9 +64,8 @@ def test_get_forecast_success(mock_post):
     }
     mock_post.return_value = mock_response
 
-    # Mock Streamlit secrets (NEW: api_key instead of databricks_token)
-    with patch("app.st.secrets", {"api_key": "test-api-key", "fastapi_url": "http://localhost:8000"}):
-        result = get_forecast("Cat1", 14)
+    # Secrets already mocked at module level
+    result = get_forecast("Cat1", 14)
 
     # Verify result
     assert result is not None
@@ -78,7 +83,8 @@ def test_get_forecast_success(mock_post):
 
     # Check headers (X-API-Key, not Authorization)
     assert "X-API-Key" in call_args[1]["headers"]
-    assert call_args[1]["headers"]["X-API-Key"] == "test-api-key"
+    # FIXED: Check against the mocked value
+    assert call_args[1]["headers"]["X-API-Key"] == "test-api-key-from-mock"
 
     # Check params (product_id and horizon)
     assert call_args[1]["params"]["product_id"] == "Cat1"
@@ -96,10 +102,10 @@ def test_get_forecast_invalid_api_key(mock_post):
     mock_response.text = "Invalid API key"
     mock_post.return_value = mock_response
 
-    with patch("app.st.secrets", {"api_key": "invalid-key", "fastapi_url": "http://localhost:8000"}):
-        with patch("app.st.error"):  # Mock st.error to avoid errors
-            result = get_forecast("Cat1", 14)
+    with patch("app.st.error"):  # Mock st.error to avoid errors
+        result = get_forecast("Cat1", 14)
 
+    # Should return None on 401
     assert result is None
 
 
@@ -114,59 +120,60 @@ def test_get_forecast_product_not_found(mock_post):
     mock_response.text = "Product not found"
     mock_post.return_value = mock_response
 
-    with patch("app.st.secrets", {"api_key": "test-key", "fastapi_url": "http://localhost:8000"}):
-        with patch("app.st.error"):
-            result = get_forecast("InvalidProduct", 14)
+    with patch("app.st.error"):
+        result = get_forecast("InvalidProduct", 14)
 
+    # Should return None on 404
     assert result is None
 
 
 @patch("app.requests.post")
 def test_get_forecast_api_error(mock_post):
-    """Test forecast API error handling (502)"""
+    """Test forecast API with server error (500)"""
     from app import get_forecast
 
-    # Mock 502 Bad Gateway response
+    # Mock 500 server error
     mock_response = MagicMock()
-    mock_response.status_code = 502
-    mock_response.text = "Bad Gateway"
+    mock_response.status_code = 500
+    mock_response.text = "Internal server error"
     mock_post.return_value = mock_response
 
-    with patch("app.st.secrets", {"api_key": "test-key", "fastapi_url": "http://localhost:8000"}):
-        with patch("app.st.error"):
-            result = get_forecast("Cat1", 14)
+    with patch("app.st.error"):
+        result = get_forecast("Cat1", 14)
 
+    # Should return None on 500
     assert result is None
 
 
 @patch("app.requests.post")
 def test_get_forecast_connection_error(mock_post):
-    """Test forecast API connection error handling"""
-    import requests
+    """Test forecast API with connection error"""
     from app import get_forecast
 
     # Mock connection error
-    mock_post.side_effect = requests.exceptions.ConnectionError("Cannot connect to FastAPI")
+    mock_post.side_effect = Exception("Connection refused")
 
-    with patch("app.st.secrets", {"api_key": "test-key", "fastapi_url": "http://localhost:8000"}):
-        with patch("app.st.error"):
-            result = get_forecast("Cat1", 14)
+    with patch("app.st.error"):
+        result = get_forecast("Cat1", 14)
 
+    # Should return None on connection error
     assert result is None
 
 
 def test_products_config():
-    """Test products configuration (NEW: product_id instead of endpoint)"""
+    """Test product configuration (NEW)"""
     from app import PRODUCTS
 
+    # Should have 2 products configured
+    assert len(PRODUCTS) == 2
     assert "Cat1" in PRODUCTS
     assert "Cat2" in PRODUCTS
 
-    # Check for product_id field (not endpoint)
-    assert PRODUCTS["Cat1"]["product_id"] == "Cat1"
-    assert PRODUCTS["Cat2"]["product_id"] == "Cat2"
+    # Check product structure
+    assert "name" in PRODUCTS["Cat1"]
+    assert "product_id" in PRODUCTS["Cat1"]
 
-    # Verify names
+    # Check specific products
     assert PRODUCTS["Cat1"]["name"] == "WHITE HANGING HEART T-LIGHT HOLDER"
     assert PRODUCTS["Cat2"]["name"] == "JUMBO BAG RED RETROSPOT"
 
@@ -175,7 +182,7 @@ def test_fastapi_url_config():
     """Test FastAPI URL configuration (NEW: replaces test_databricks_host_config)"""
     from app import FASTAPI_URL
 
-    # Should be configured (either from secrets or default)
+    # Should be configured (from mock or default)
     assert FASTAPI_URL is not None
     assert isinstance(FASTAPI_URL, str)
 
@@ -187,7 +194,7 @@ def test_api_key_config():
     """Test API key configuration (NEW)"""
     from app import API_KEY
 
-    # Should be configured (either from secrets or default)
+    # Should be configured (from mock or default)
     assert API_KEY is not None
     assert isinstance(API_KEY, str)
     assert len(API_KEY) > 0

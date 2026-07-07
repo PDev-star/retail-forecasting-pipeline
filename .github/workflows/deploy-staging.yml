@@ -1,20 +1,21 @@
 name: Deploy to Staging
 
 on:
-  push:
+  workflow_run:
+    workflows: ["Test FastAPI", "Streamlit App Tests"]
+    types:
+      - completed
     branches: [ develop, staging, GitConnectionTest ]
-  pull_request:
-    branches: [ main ]
 
 jobs:
   # ============================================================
-  # DEPLOYMENT (Only runs if all tests passed in test-*.yml workflows)
+  # DEPLOYMENT (Only runs if ALL tests passed)
   # ============================================================
   
   deploy-staging:
     runs-on: ubuntu-latest
-    # Only deploy on push, not PR
-    if: ${{ github.event_name == 'push' }}
+    # Only deploy if BOTH test workflows succeeded
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     
     steps:
     - uses: actions/checkout@v4
