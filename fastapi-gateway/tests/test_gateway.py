@@ -4,6 +4,7 @@ import sys
 from unittest.mock import MagicMock, patch
 
 import pytest
+import requests
 from fastapi.testclient import TestClient
 
 # Add parent directory to path
@@ -128,7 +129,8 @@ def test_forecast_databricks_error(mock_post):
 @patch("api_gateway.requests.post")
 def test_forecast_timeout(mock_post):
     """Test handling of request timeout"""
-    mock_post.side_effect = Exception("Connection timeout")
+    # FIXED: Use requests.Timeout instead of generic Exception
+    mock_post.side_effect = requests.Timeout("Connection timeout")
 
     response = client.post("/forecast?product_id=Cat1&horizon=14", headers={"X-API-Key": VALID_TEST_KEY})
 
