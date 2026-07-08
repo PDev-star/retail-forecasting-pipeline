@@ -2,14 +2,15 @@ name: Streamlit App Tests
 
 on:
   push:
-    branches: [ main, develop, GitConnectionTest ]
+    branches: [ main, staging, GitConnectionTest ]
     paths:
       - 'streamlit-app/**'
       - '.github/workflows/test-streamlit.yml'
   pull_request:
-    branches: [ main ]
+    branches: [ main, staging ]
     paths:
       - 'streamlit-app/**'
+      - '.github/workflows/test-streamlit.yml'
 
 jobs:
   test:
@@ -54,7 +55,7 @@ jobs:
         # Architecture: Smart guard pattern with AppTest integration tests
         # - Unit tests (30): Fast business logic tests
         # - Integration tests (16): Full UI workflow tests with AppTest
-        # - Total: 46 tests achieving 96.07% coverage
+        # - Total: 46 tests achieving 97.45% coverage
         coverage report --fail-under=80
     
     - name: Upload coverage report
