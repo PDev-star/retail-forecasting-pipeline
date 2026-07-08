@@ -52,7 +52,8 @@ def keep_fastapi_warm(fastapi_url: str = None, interval_seconds: int = 300, max_
                 print(f"[{datetime.now().strftime('%H:%M:%S')}] ✅ FastAPI keep-alive ping #{iteration + 1}")
             else:
                 print(f"[{datetime.now().strftime('%H:%M:%S')}] ⚠️  FastAPI returned {response.status_code}")
-        except requests.exceptions.RequestException as e:
+        except Exception as e:
+            # Catch all exceptions to prevent keep-alive thread from crashing
             print(f"[{datetime.now().strftime('%H:%M:%S')}] ❌ FastAPI keep-alive failed: {e}")
         
         time.sleep(interval_seconds)
