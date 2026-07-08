@@ -122,3 +122,89 @@ def test_keep_fastapi_warm_handles_errors(mock_get, mock_sleep):
 
     # Should not crash, just log error
     mock_get.assert_called()
+
+
+@patch("utils.config.time.sleep")
+@patch("utils.config.requests.get")
+def test_keep_fastapi_warm_non_200_status(mock_get, mock_sleep):
+    """Test keep_fastapi_warm with non-200 response"""
+    # Mock 503 Service Unavailable response
+    mock_response = MagicMock()
+    mock_response.status_code = 503
+    mock_get.return_value = mock_response
+
+    # Run one iteration
+    mock_sleep.side_effect = [None, KeyboardInterrupt]
+
+    try:
+        keep_fastapi_warm()
+    except KeyboardInterrupt:
+        pass
+
+    # Should handle non-200 status gracefully
+    mock_get.assert_called()
+    assert "health" in mock_get.call_args[0][0]
+
+
+@patch("utils.config.time.sleep")
+@patch("utils.config.requests.get")
+def test_keep_fastapi_warm_timeout(mock_get, mock_sleep):
+    """Test keep_fastapi_warm with request timeout"""
+    import requests
+    
+    # Mock timeout error
+    mock_get.side_effect = requests.exceptions.Timeout("Timeout")
+
+    # Run one iteration
+    mock_sleep.side_effect = [None, KeyboardInterrupt]
+
+    try:
+        keep_fastapi_warm()
+    except KeyboardInterrupt:
+        pass
+
+    # Should handle timeout gracefully
+    mock_get.assert_called()
+
+
+@patch("utils.config.time.sleep")
+@patch("utils.config.requests.get")
+def test_keep_fastapi_warm_connection_error(mock_get, mock_sleep):
+    """Test keep_fastapi_warm with connection error"""
+    import requests
+    
+    # Mock connection error
+    mock_get.side_effect = requests.exceptions.ConnectionError("Cannot connect")
+
+    # Run one iteration
+    mock_sleep.side_effect = [None, KeyboardInterrupt]
+
+    try:
+        keep_fastapi_warm()
+    except KeyboardInterrupt:
+        pass
+
+    # Should handle connection error gracefully
+    mock_get.assert_called()
+
+
+@patch("utils.config.time.sleep")
+@patch("utils.config.requests.get")
+def test_keep_fastapi_warm_multiple_iterations(mock_get, mock_sleep):
+    """Test keep_fastapi_warm runs multiple iterations"""
+    # Mock successful responses
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_get.return_value = mock_response
+
+    # Run 3 iterations: [sleep1, sleep2, sleep3, KeyboardInterrupt]
+    # The KeyboardInterrupt on the 4th sleep means the function runs 4 times
+    mock_sleep.side_effect = [None, None, None, KeyboardInterrupt]
+
+    try:
+        keep_fastapi_warm()
+    except KeyboardInterrupt:
+        pass
+
+    # Verify 4 pings were made (one before each sleep call)
+    assert mock_get.call_count == 4

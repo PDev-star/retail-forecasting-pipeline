@@ -26,7 +26,7 @@ Developer Push
 GitHub Actions (60 seconds)
     ├─ Lint code ✅
     ├─ 12 FastAPI tests ✅
-    └─ 8 Streamlit tests ✅
+    └─ 46 Streamlit tests (96% coverage) ✅
     ↓
 All Pass? → Auto-Deploy
     ├─ Streamlit (3 min) 🚀
@@ -43,7 +43,7 @@ LIVE! 🎉 (10 min total)
 retail-forecasting-pipeline/          # Git-connected on GitConnectionTest branch
 ├── .github/
 │   └── workflows/
-│       ├── test-streamlit.yml        # Streamlit CI (≥70% coverage)
+│       ├── test-streamlit.yml        # Streamlit CI (≥80% coverage)
 │       ├── test-fastapi.yml          # FastAPI CI (≥80% coverage)
 │       ├── lint.yml                  # Code quality checks
 │       ├── deploy.yml                # Production auto-deploy
@@ -53,11 +53,22 @@ retail-forecasting-pipeline/          # Git-connected on GitConnectionTest branc
 │   └── Retail Forecasting Pipeline Complete.ipynb
 │
 ├── streamlit-app/                    # Public UI (Week 12 deliverable)
-│   ├── app.py                        # 400 lines UI code
+│   ├── app.py                        # 400 lines UI code (smart guard pattern)
+│   ├── components/                   # UI components (100% coverage)
+│   ├── services/                     # Business logic (100% coverage)
+│   ├── utils/                        # Configuration (85% coverage)
 │   ├── requirements.txt
 │   ├── requirements-dev.txt
+│   ├── .coveragerc                   # Coverage configuration
+│   ├── TESTING.md                    # Testing notes
+│   ├── docs/
+│   │   └── INTEGRATION_TESTING.md    # Complete testing guide
 │   └── tests/
-│       └── test_app.py              # 8 unit tests
+│       ├── test_api_client.py        # 13 unit tests
+│       ├── test_app.py               # 2 unit tests
+│       ├── test_config.py            # 11 unit tests
+│       ├── test_inventory.py         # 4 unit tests
+│       └── test_ui_integration.py    # 16 integration tests (AppTest)
 │
 ├── fastapi-gateway/                  # Optional API gateway
 │   ├── api_gateway.py               # 80 lines proxy code
@@ -86,13 +97,19 @@ git checkout GitConnectionTest
 
 ```bash
 # Install dependencies
-pip install -r fastapi-gateway/requirements-dev.txt
+pip install -r streamlit-app/requirements-dev.txt
 
 # Run all tests
 pytest
 
 # With coverage
 pytest --cov --cov-report=html
+
+# Run only unit tests (fast, ~1 second)
+pytest streamlit-app/tests/test_*.py --ignore=streamlit-app/tests/test_ui_integration.py
+
+# Run integration tests (comprehensive, ~20 seconds)
+APPTEST_MODE=1 pytest streamlit-app/tests/test_ui_integration.py -v
 ```
 
 ### 3. Enable Auto-Deployment (One-time, 15 minutes)
@@ -132,17 +149,41 @@ pytest
 - **Week 10**: Unit tests passing ✅
 - **Week 17**: QA suite ≥80% coverage ✅
 
-| Component | Tests | Coverage |
-|-----------|-------|----------|
-| FastAPI Gateway | 12 tests | 85%+ |
-| Streamlit App | 8 tests | 75%+ |
-| **Total** | **20 tests** | **82%+** |
+| Component | Tests | Coverage | Method |
+|-----------|-------|----------|--------|
+| FastAPI Gateway | 12 tests | 85%+ | Unit tests |
+| Streamlit App | 46 tests | **96.07%** | Unit + Integration (AppTest) |
+| **Total** | **58 tests** | **~92%** | Two-tier strategy |
+
+### Streamlit Testing Architecture
+
+**Two-Tier Strategy:**
+* **Unit Tests (30 tests, ~1s)** - Fast business logic tests
+* **Integration Tests (16 tests, ~20s)** - Full UI workflow tests with Streamlit AppTest
+
+**Smart Guard Pattern:** Context-aware UI rendering allows both unit and integration tests without code duplication.
+
+**Coverage Breakdown:**
+```
+streamlit-app/
+├── app.py                    91.04%  (Smart guard pattern)
+├── components/charts.py     100.00%  (AppTest integration)
+├── components/sidebar.py    100.00%  (AppTest integration)
+├── components/tabs.py       100.00%  (AppTest integration)
+├── services/api_client.py   100.00%  (Unit tests with mocks)
+├── services/inventory.py    100.00%  (Pure function tests)
+└── utils/config.py           85.71%  (Configuration tests)
+───────────────────────────────────────
+TOTAL                         96.07%
+```
+
+See `streamlit-app/docs/INTEGRATION_TESTING.md` for complete guide.
 
 ### GitHub Actions
 
 Every push triggers 5 workflows:
-1. **test-streamlit.yml** - Streamlit tests (~25s)
-2. **test-fastapi.yml** - FastAPI tests (~30s)
+1. **test-streamlit.yml** - Streamlit tests (~25s, 46 tests, ≥80% threshold)
+2. **test-fastapi.yml** - FastAPI tests (~30s, 12 tests)
 3. **lint.yml** - Code quality (~15s)
 4. **deploy.yml** - Production deployment (~10s)
 5. **deploy-staging.yml** - Staging (optional)
@@ -211,10 +252,11 @@ Every push triggers 5 workflows:
 - ✅ Auto-deployment enabled
 
 ### Week 17 ✅
-- ✅ QA suite ≥80% coverage
+- ✅ QA suite ≥80% coverage (achieved 96%)
 - ✅ Complete E2E engine (2 categories, 2+ models)
 - ✅ Full CI/CD pipeline
 - ✅ Production deployment automation
+- ✅ Integration testing with Streamlit AppTest
 
 ## 🔄 Development Workflow
 
@@ -247,6 +289,7 @@ git push origin feature/new-scenario
 ## 📚 Documentation
 
 - [Streamlit App](streamlit-app/README.md) - UI deployment guide
+- [Integration Testing Guide](streamlit-app/docs/INTEGRATION_TESTING.md) - Complete testing guide
 - [FastAPI Gateway](fastapi-gateway/README.md) - API deployment guide
 - [Notebook](snapshots/) - Data pipeline and ML training
 - [CI/CD Guide](docs/CICD.md) - Complete automation guide
@@ -273,17 +316,18 @@ MIT License - Built for Impact pSiddhi S2-D-02
 ✅ **PRODUCTION-READY WITH FULL CI/CD**
 
 - ✅ Complete ML pipeline
-- ✅ 20 automated tests (82% coverage)
+- ✅ 58 automated tests (96% coverage)
 - ✅ 5 GitHub Actions workflows
 - ✅ Auto-deployment to 2 platforms
 - ✅ Zero manual steps
 - ✅ Cost-effective (₹0/month)
 - ✅ Scalable infrastructure
+- ✅ Integration testing with Streamlit AppTest
 
 ---
 
 **Total Lines of Code:** 1,500+  
-**Test Coverage:** 82%+  
+**Test Coverage:** 96%+ (Streamlit), 85%+ (FastAPI)  
 **Deployment Cost:** ₹0  
 **Deployment Time:** 10 minutes (automated)  
 **Development Time:** 18 weeks

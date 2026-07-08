@@ -39,8 +39,39 @@ from services.inventory import calculate_stock_recommendation
 __all__ = ['get_forecast', 'calculate_stock_recommendation', 'FASTAPI_URL', 'API_KEY', 'PRODUCTS']
 
 
-# Start keep-alive thread (only when not testing)
-if 'pytest' not in sys.modules and 'PYTEST_CURRENT_TEST' not in os.environ:
+# ============================================================================
+# SMART PYTEST GUARD
+# ============================================================================
+# This guard allows:
+#   1. Normal Streamlit app execution (pytest not in modules)
+#   2. Integration tests via AppTest (APPTEST_MODE=1)
+#   3. Blocks UI for unit tests (pytest in modules, no APPTEST_MODE)
+
+def _should_run_ui() -> bool:
+    """
+    Determine if UI code should execute.
+    
+    Returns True when:
+      - APPTEST_MODE=1 (integration tests need UI)
+      - OR pytest not in sys.modules (normal Streamlit app)
+    
+    Returns False when:
+      - pytest in sys.modules AND no APPTEST_MODE (unit tests)
+    """
+    # Integration tests explicitly set APPTEST_MODE
+    if os.environ.get('APPTEST_MODE') == '1':
+        return True
+    
+    # Unit tests have pytest in modules but no APPTEST_MODE
+    if 'pytest' in sys.modules or 'PYTEST_CURRENT_TEST' in os.environ:
+        return False
+    
+    # Normal Streamlit app execution
+    return True
+
+
+# Start keep-alive thread (only when UI should run)
+if _should_run_ui():
     if FASTAPI_URL != "http://localhost:8000":
         if "keep_alive_started" not in st.session_state:
             st.session_state.keep_alive_started = True
@@ -61,10 +92,10 @@ from components.tabs import (
 )
 
 # ============================================================================
-# MAIN APP (Skip during testing)
+# MAIN APP (Skip during unit testing, run for integration tests)
 # ============================================================================
 
-if 'pytest' not in sys.modules and 'PYTEST_CURRENT_TEST' not in os.environ:
+if _should_run_ui():
     # Render sidebar and get parameters
     sidebar_state = render_sidebar(PRODUCTS)
     

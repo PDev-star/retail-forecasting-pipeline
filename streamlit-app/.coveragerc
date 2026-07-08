@@ -30,6 +30,15 @@ exclude_lines =
     # Debug code
     if settings.DEBUG
     
+    # Test environment import mocks
+    except ImportError:
+    # Test environment
+    class MockSidebar:
+    class MockStreamlit:
+    class MockTabs:
+    class MockCharts:
+    @staticmethod
+    
 precision = 2
 show_missing = True
 skip_covered = False

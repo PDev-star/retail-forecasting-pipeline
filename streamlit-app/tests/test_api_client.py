@@ -140,15 +140,21 @@ def test_get_forecast_api_error(mock_post):
 
 @patch("services.api_client.requests.post")
 def test_get_forecast_connection_error(mock_post):
-    """Test forecast API with connection error"""
-    # Mock connection error
-    mock_post.side_effect = Exception("Connection refused")
+    """Test forecast API with connection error (specific ConnectionError exception)"""
+    import requests
+    
+    # Mock connection error - use specific requests.exceptions.ConnectionError
+    mock_post.side_effect = requests.exceptions.ConnectionError("Connection refused")
 
-    with patch("services.api_client.st.error"):
+    with patch("services.api_client.st.error") as mock_error:
         result = get_forecast("Cat1", 14)
 
     # Should return None on connection error
     assert result is None
+    # Verify the specific connection error message was shown
+    mock_error.assert_called_once()
+    error_msg = mock_error.call_args[0][0]
+    assert "Cannot connect to FastAPI Gateway" in error_msg
 
 
 @patch("services.api_client.requests.post")
@@ -205,3 +211,76 @@ def test_get_forecast_empty_values(mock_post):
     # Should handle empty values gracefully
     assert result is not None
     assert len(result) == 0
+
+
+@patch("services.api_client.requests.post")
+def test_get_forecast_json_decode_error(mock_post):
+    """Test forecast API when response.json() fails"""
+    # Mock response that raises JSONDecodeError
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.json.side_effect = ValueError("Invalid JSON")
+    mock_post.return_value = mock_response
+
+    with patch("services.api_client.st.error"):
+        result = get_forecast("Cat1", 14)
+
+    # Should return None when JSON parsing fails
+    assert result is None
+
+
+@patch("services.api_client.requests.post")
+def test_get_forecast_missing_nested_keys(mock_post):
+    """Test forecast API with response missing nested keys"""
+    # Mock response with missing nested 'values' key
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = {
+        "success": True,
+        "product": {"id": "Cat1"},
+        "forecast": {"horizon_days": 14},  # Missing 'values' key
+    }
+    mock_post.return_value = mock_response
+
+    with patch("services.api_client.st.error"):
+        result = get_forecast("Cat1", 14)
+
+    # Should return None when nested keys are missing
+    assert result is None
+
+
+@patch("services.api_client.requests.post")
+def test_get_forecast_network_error(mock_post):
+    """Test forecast API with generic network error"""
+    # Mock generic Exception (not ConnectionError or Timeout)
+    mock_post.side_effect = OSError("Network unreachable")
+
+    with patch("services.api_client.st.error") as mock_error:
+        result = get_forecast("Cat1", 14)
+
+    # Should return None on any exception
+    assert result is None
+    # Verify generic error message was shown
+    mock_error.assert_called_once()
+    error_msg = mock_error.call_args[0][0]
+    assert "Error calling FastAPI" in error_msg
+
+
+@patch("services.api_client.requests.post")
+def test_get_forecast_other_status_codes(mock_post):
+    """Test forecast API with other HTTP error codes (502, 503, etc)"""
+    # Mock 502 Bad Gateway
+    mock_response = MagicMock()
+    mock_response.status_code = 502
+    mock_response.text = "Bad Gateway"
+    mock_post.return_value = mock_response
+
+    with patch("services.api_client.st.error") as mock_error:
+        result = get_forecast("Cat1", 14)
+
+    # Should return None on 502
+    assert result is None
+    # Verify generic API error message was shown
+    mock_error.assert_called_once()
+    error_msg = mock_error.call_args[0][0]
+    assert "API Error: 502" in error_msg
