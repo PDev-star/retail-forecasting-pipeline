@@ -18,29 +18,32 @@ except (ImportError, AttributeError, FileNotFoundError):
 PRODUCTS = {
     "Cat1": {
         "name": "WHITE HANGING HEART T-LIGHT HOLDER",
-        "id": "22469",
-        "color": "#FF6B6B",
-        "description": "Decorative hanging heart-shaped tea light holder"
+        "sku": "22469",
+        "product_id": "Cat1",
+        "color": "#FF6B6B"
     },
     "Cat2": {
-        "name": "WHITE METAL LANTERN",
-        "id": "22083",
-        "color": "#4ECDC4",
-        "description": "Elegant white metal decorative lantern"
+        "name": "JUMBO BAG RED RETROSPOT",
+        "sku": "22083",
+        "product_id": "Cat2",
+        "color": "#4ECDC4"
     }
 }
 
 
-def keep_fastapi_warm(fastapi_url: str, interval_seconds: int = 300, max_iterations: int = 100):
+def keep_fastapi_warm(fastapi_url: str = None, interval_seconds: int = 300, max_iterations: int = 100):
     """
     Background thread function to ping FastAPI endpoint every interval_seconds.
     Prevents Render free tier from cold starting (15 min idle timeout).
     
     Args:
-        fastapi_url: Base URL of FastAPI service
+        fastapi_url: Base URL of FastAPI service (default: uses global FASTAPI_URL)
         interval_seconds: Seconds between pings (default 5 min)
         max_iterations: Max pings before stopping (default 100)
     """
+    if fastapi_url is None:
+        fastapi_url = FASTAPI_URL
+    
     iteration = 0
     while iteration < max_iterations:
         try:
