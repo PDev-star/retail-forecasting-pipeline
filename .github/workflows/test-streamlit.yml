@@ -31,6 +31,8 @@ jobs:
         pip install -r requirements-dev.txt
     
     - name: Run unit tests with coverage
+      env:
+        PYTHONPATH: .
       run: |
         cd streamlit-app
         pytest tests/test_api_client.py tests/test_app.py tests/test_config.py tests/test_inventory.py \
@@ -39,6 +41,7 @@ jobs:
     - name: Run integration tests with coverage
       env:
         APPTEST_MODE: 1
+        PYTHONPATH: .
       run: |
         cd streamlit-app
         pytest tests/test_ui_integration.py \
