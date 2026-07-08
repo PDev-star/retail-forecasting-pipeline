@@ -1,8 +1,18 @@
 # API client for FastAPI gateway
 import requests
-import streamlit as st
 
 from utils.config import FASTAPI_URL, API_KEY
+
+# Conditional streamlit import - tests run without streamlit
+try:
+    import streamlit as st
+except ImportError:
+    # Test environment - create a simple mock for st.error()
+    class MockStreamlit:
+        @staticmethod
+        def error(msg):
+            print(f"[ERROR]: {msg}")
+    st = MockStreamlit()
 
 
 def get_forecast(product_id, horizon):

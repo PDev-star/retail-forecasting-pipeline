@@ -1,6 +1,33 @@
 # Sidebar UI component for product selection and parameters
 
-import streamlit as st
+# Conditional streamlit import - tests run without streamlit
+try:
+    import streamlit as st
+except ImportError:
+    # Test environment - UI components won't be called during tests
+    # Create a minimal mock to avoid import errors
+    class MockSidebar:
+        @staticmethod
+        def title(text): pass
+        @staticmethod
+        def markdown(text): pass
+        @staticmethod
+        def selectbox(*args, **kwargs):
+            # Return first option if options provided
+            if 'options' in kwargs:
+                return kwargs['options'][0]
+            return "Cat1"  # Default
+        @staticmethod
+        def slider(*args, **kwargs):
+            # Return default value if provided, otherwise 30
+            if 'value' in kwargs:
+                return kwargs['value']
+            return 30
+    
+    class MockStreamlit:
+        sidebar = MockSidebar()
+    
+    st = MockStreamlit()
 
 def render_sidebar(PRODUCTS):
     """

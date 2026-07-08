@@ -2,7 +2,27 @@
 
 from datetime import datetime
 import pandas as pd
-import streamlit as st
+
+# Conditional streamlit import - tests run without streamlit
+try:
+    import streamlit as st
+except ImportError:
+    # Test environment - UI components won't be called during tests
+    class MockStreamlit:
+        @staticmethod
+        def markdown(text): pass
+        @staticmethod
+        def info(text): pass
+        @staticmethod
+        def dataframe(*args, **kwargs): pass
+        @staticmethod
+        def download_button(*args, **kwargs): pass
+        @staticmethod
+        def metric(*args, **kwargs): pass
+        @staticmethod
+        def columns(n): return [MockStreamlit() for _ in range(n)]
+    st = MockStreamlit()
+
 from components.charts import render_forecast_chart, render_inventory_chart
 
 def render_forecast_tab(forecast, horizon, product, scenario_desc):

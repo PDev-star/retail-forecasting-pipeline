@@ -3,11 +3,16 @@ import time
 from datetime import datetime
 
 import requests
-import streamlit as st
 
-# Configuration from Streamlit secrets
-FASTAPI_URL = st.secrets.get("fastapi_url", "http://localhost:8000")
-API_KEY = st.secrets.get("api_key", "demo-key-12345")
+# Conditional streamlit import - tests run without streamlit
+try:
+    import streamlit as st
+    FASTAPI_URL = st.secrets.get("fastapi_url", "http://localhost:8000")
+    API_KEY = st.secrets.get("api_key", "demo-key-12345")
+except (ImportError, AttributeError):
+    # Test environment - use defaults
+    FASTAPI_URL = "http://localhost:8000"
+    API_KEY = "demo-key-12345"
 
 # Product catalog - maps to FastAPI product IDs
 PRODUCTS = {

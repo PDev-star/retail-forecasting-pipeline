@@ -1,8 +1,13 @@
 name: Deploy to Staging
 
+# This workflow WAITS for BOTH test workflows to complete
+# It will only run after test-fastapi.yml AND test-streamlit.yml finish
+# If either test fails, this workflow fails too (no deployment)
 on:
-  push:
-    branches: [ develop, staging, GitConnectionTest ]
+  workflow_run:
+    workflows: ["Test FastAPI", "Streamlit App Tests"]
+    types: [completed]
+    branches: [develop, staging, GitConnectionTest]
 
 jobs:
   # ============================================================
@@ -11,119 +16,83 @@ jobs:
   
   check-tests:
     runs-on: ubuntu-latest
+    # Fail immediately if the triggering workflow failed
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     outputs:
-      fastapi-passed: ${{ steps.check-fastapi.outputs.passed }}
-      streamlit-passed: ${{ steps.check-streamlit.outputs.passed }}
+      both-passed: ${{ steps.check-both.outputs.passed }}
     
     steps:
     - uses: actions/checkout@v4
     
-    - name: Check FastAPI Test Status
-      id: check-fastapi
+    - name: Check Both Test Workflows
+      id: check-both
       uses: actions/github-script@v7
       with:
         script: |
-          const runs = await github.rest.actions.listWorkflowRunsForRepo({
+          // The workflow_run event only tells us about ONE workflow
+          // We need to check if BOTH FastAPI and Streamlit tests passed
+          
+          const commit_sha = context.payload.workflow_run.head_sha;
+          console.log(`Checking tests for commit: ${commit_sha}`);
+          
+          // Get all workflow runs for this commit
+          const { data: runs } = await github.rest.actions.listWorkflowRunsForRepo({
             owner: context.repo.owner,
             repo: context.repo.repo,
-            workflow_id: 'test-fastapi.yml',
-            branch: context.ref.replace('refs/heads/', ''),
-            event: 'push',
-            per_page: 1
+            head_sha: commit_sha,
+            per_page: 100
           });
           
-          if (runs.data.workflow_runs.length === 0) {
-            console.log('⚠️  No FastAPI test runs found - treating as failed');
-            core.setOutput('passed', 'false');
+          // Find FastAPI and Streamlit test runs
+          const fastapiRun = runs.workflow_runs.find(r => 
+            r.name === 'Test FastAPI' && r.head_sha === commit_sha
+          );
+          const streamlitRun = runs.workflow_runs.find(r => 
+            r.name === 'Streamlit App Tests' && r.head_sha === commit_sha
+          );
+          
+          console.log('FastAPI Test:', fastapiRun ? fastapiRun.conclusion : 'NOT FOUND');
+          console.log('Streamlit Test:', streamlitRun ? streamlitRun.conclusion : 'NOT FOUND');
+          
+          // Check if both exist and passed
+          const fastapi_passed = fastapiRun && fastapiRun.conclusion === 'success';
+          const streamlit_passed = streamlitRun && streamlitRun.conclusion === 'success';
+          
+          if (!fastapiRun) {
+            console.log('❌ FastAPI test run not found for this commit');
+            core.setFailed('FastAPI tests did not run');
             return;
           }
           
-          const latestRun = runs.data.workflow_runs[0];
-          console.log(`FastAPI Test: ${latestRun.conclusion} (Run #${latestRun.run_number})`);
-          
-          if (latestRun.head_sha !== context.sha) {
-            console.log(`⚠️  Latest run is for different commit`);
-            console.log(`   Expected: ${context.sha}`);
-            console.log(`   Found: ${latestRun.head_sha}`);
-            core.setOutput('passed', 'false');
+          if (!streamlitRun) {
+            console.log('❌ Streamlit test run not found for this commit');
+            core.setFailed('Streamlit tests did not run');
             return;
           }
           
-          core.setOutput('passed', latestRun.conclusion === 'success' ? 'true' : 'false');
-    
-    - name: Check Streamlit Test Status
-      id: check-streamlit
-      uses: actions/github-script@v7
-      with:
-        script: |
-          const runs = await github.rest.actions.listWorkflowRunsForRepo({
-            owner: context.repo.owner,
-            repo: context.repo.repo,
-            workflow_id: 'test-streamlit.yml',
-            branch: context.ref.replace('refs/heads/', ''),
-            event: 'push',
-            per_page: 1
-          });
-          
-          if (runs.data.workflow_runs.length === 0) {
-            console.log('⚠️  No Streamlit test runs found');
-            console.log('ℹ️  This is OK if Streamlit code was not changed');
-            // Check if streamlit code was changed in this commit
-            const files = await github.rest.repos.getCommit({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              ref: context.sha
-            });
-            
-            const streamlitChanged = files.data.files.some(f => 
-              f.filename.startsWith('streamlit-app/')
-            );
-            
-            if (streamlitChanged) {
-              console.log('❌ Streamlit code changed but no test run found!');
-              core.setOutput('passed', 'false');
-            } else {
-              console.log('✅ Streamlit unchanged - skipping check');
-              core.setOutput('passed', 'true');
-            }
+          if (!fastapi_passed) {
+            console.log('❌ FastAPI tests FAILED');
+            core.setFailed('FastAPI tests failed');
             return;
           }
           
-          const latestRun = runs.data.workflow_runs[0];
-          console.log(`Streamlit Test: ${latestRun.conclusion} (Run #${latestRun.run_number})`);
-          
-          if (latestRun.head_sha !== context.sha) {
-            console.log(`⚠️  Latest run is for different commit`);
-            console.log(`   This is OK if Streamlit code was not changed`);
-            
-            // Check if streamlit code was changed in this commit
-            const files = await github.rest.repos.getCommit({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              ref: context.sha
-            });
-            
-            const streamlitChanged = files.data.files.some(f => 
-              f.filename.startsWith('streamlit-app/')
-            );
-            
-            if (streamlitChanged) {
-              console.log('❌ Streamlit changed but latest test is stale!');
-              core.setOutput('passed', 'false');
-            } else {
-              console.log('✅ Streamlit unchanged - using previous test result');
-              core.setOutput('passed', latestRun.conclusion === 'success' ? 'true' : 'false');
-            }
+          if (!streamlit_passed) {
+            console.log('❌ Streamlit tests FAILED');
+            core.setFailed('Streamlit tests failed');
             return;
           }
           
-          core.setOutput('passed', latestRun.conclusion === 'success' ? 'true' : 'false');
+          console.log('✅ Both test workflows PASSED');
+          core.setOutput('passed', 'true');
     
     - name: Test Status Summary
       run: |
         echo "📊 Test Status Summary:"
-        echo "  FastAPI Tests: ${{ steps.check-fastapi.outputs.passed == 'true' && '✅ PASSED' || '❌ FAILED' }}"
-        echo "  Streamlit Tests: ${{ steps.check-streamlit.outputs.passed == 'true' && '✅ PASSED' || '❌ FAILED' }}"
+        echo "  Commit: ${{ github.event.workflow_run.head_sha }}"
+        echo "  ✅ FastAPI Tests: PASSED"
+        echo "  ✅ Streamlit Tests: PASSED"
+        echo ""
+        echo "🚀 Ready for deployment!"
   
   # ============================================================
   # DEPLOYMENT (Only runs if ALL tests passed)
@@ -132,17 +101,19 @@ jobs:
   deploy-staging:
     needs: check-tests
     runs-on: ubuntu-latest
-    # Only deploy if BOTH test workflows succeeded
-    if: ${{ needs.check-tests.outputs.fastapi-passed == 'true' && needs.check-tests.outputs.streamlit-passed == 'true' }}
+    # This job only runs if check-tests succeeded
+    # check-tests fails if any test failed, so this is safe
     
     steps:
     - uses: actions/checkout@v4
+      with:
+        ref: ${{ github.event.workflow_run.head_sha }}
     
     - name: Staging Deployment Notice
       run: |
         echo "🚀 Deploying to Staging Environment"
-        echo "Branch: ${{ github.ref }}"
-        echo "Commit: ${{ github.sha }}"
+        echo "Branch: ${{ github.event.workflow_run.head_branch }}"
+        echo "Commit: ${{ github.event.workflow_run.head_sha }}"
         echo ""
         echo "✅ Both FastAPI and Streamlit tests passed"
         echo "   Ready for deployment!"

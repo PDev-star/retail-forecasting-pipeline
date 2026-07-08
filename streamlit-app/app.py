@@ -5,15 +5,28 @@ import sys
 import os
 import threading
 
-import streamlit as st
-
-# Page configuration
-st.set_page_config(
-    page_title="Retail Forecasting Engine",
-    page_icon="📊",
-    layout="wide",
-    initial_sidebar_state="expanded",
-)
+# Conditional streamlit import - tests import functions without running UI
+try:
+    import streamlit as st
+    
+    # Page configuration (only when streamlit is available)
+    st.set_page_config(
+        page_title="Retail Forecasting Engine",
+        page_icon="📊",
+        layout="wide",
+        initial_sidebar_state="expanded",
+    )
+except ImportError:
+    # Test environment - create minimal mock for imports
+    class MockStreamlit:
+        class session_state(dict):
+            pass
+        session_state = session_state()
+        @staticmethod
+        def set_page_config(**kwargs): pass
+        def __getattr__(self, name):
+            return lambda *args, **kwargs: None
+    st = MockStreamlit()
 
 # ============================================================================
 # CONFIGURATION AND SERVICES
