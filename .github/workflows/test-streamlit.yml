@@ -10,6 +10,7 @@ on:
     branches: [ main, staging ]
     paths:
       - 'streamlit-app/**'
+      - '.github/workflows/test-streamlit.yml'
 
 jobs:
   test:

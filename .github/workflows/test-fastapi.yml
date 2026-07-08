@@ -2,13 +2,19 @@ name: FastAPI Gateway Tests
 
 on:
   push:
-    branches: [ main, develop, staging, GitConnectionTest ]
+    branches: [ main, staging, GitConnectionTest ]
+    paths:
+      - 'fastapi-gateway/**'
+      - '.github/workflows/test-fastapi.yml'
   pull_request:
-    branches: [ main ]
+    branches: [ main, staging ]
+    paths:
+      - 'fastapi-gateway/**'
+      - '.github/workflows/test-fastapi.yml'
 
 jobs:
   # ============================================================
-  # STEP 1: UNIT TESTS
+  # UNIT TESTS ONLY (No deployment - deploy-staging.yml handles that)
   # ============================================================
   
   unit-tests:
@@ -32,116 +38,11 @@ jobs:
       run: |
         cd fastapi-gateway
         pytest tests/ -v --tb=short
-
-  # ============================================================
-  # STEP 2: DEPLOY TO TEST ENVIRONMENT
-  # ============================================================
-  
-  deploy-test:
-    needs: [unit-tests]
-    runs-on: ubuntu-latest
-    # Only deploy on push to specific branches (not PRs)
-    if: ${{ github.event_name == 'push' }}
     
-    steps:
-    - uses: actions/checkout@v4
-    
-    - name: Deploy FastAPI to Test Environment
-      env:
-        RENDER_DEV_DEPLOY_HOOK: ${{ secrets.RENDER_DEV_DEPLOY_HOOK }}
-      run: |
-        if [ -z "$RENDER_DEV_DEPLOY_HOOK" ]; then
-          echo "⚠️  RENDER_DEV_DEPLOY_HOOK not set - skipping deployment"
-          echo "   Integration tests will be skipped"
-          exit 0
-        fi
-        
-        echo "🚀 Deploying FastAPI to test environment..."
-        curl -X POST "$RENDER_DEV_DEPLOY_HOOK"
-        echo "✅ Deployment triggered"
-        echo ""
-        echo "⏱️  Waiting for deployment to complete (120 seconds)..."
-        sleep 120
-
-  # ============================================================
-  # STEP 3: INTEGRATION TESTS (TEST DEPLOYED API)
-  # ============================================================
-  
-  integration-tests:
-    needs: [deploy-test]
-    runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'push' }}
-    
-    steps:
-    - uses: actions/checkout@v4
-    
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.11'
-    
-    - name: Install dependencies
-      run: |
-        pip install requests
-    
-    - name: Test FastAPI Health Endpoint
-      env:
-        FASTAPI_URL: ${{ secrets.FASTAPI_DEV_URL }}
-      run: |
-        if [ -z "$FASTAPI_URL" ]; then
-          echo "⚠️  FASTAPI_DEV_URL not set - skipping integration tests"
-          exit 0
-        fi
-        
-        echo "Testing FastAPI at: $FASTAPI_URL"
-        
-        # Test health endpoint
-        response=$(curl -s -o /dev/null -w "%{http_code}" "$FASTAPI_URL/health")
-        
-        if [ "$response" -eq 200 ]; then
-          echo "✅ Health endpoint: $response"
-        else
-          echo "❌ Health endpoint failed: $response"
-          exit 1
-        fi
-    
-    - name: Test FastAPI Forecast Endpoint
-      env:
-        FASTAPI_URL: ${{ secrets.FASTAPI_DEV_URL }}
-        API_KEY: ${{ secrets.API_KEY_DEV }}
-      run: |
-        if [ -z "$FASTAPI_URL" ]; then
-          exit 0
-        fi
-        
-        echo "Testing forecast endpoint..."
-        
-        # Test with Cat1
-        response=$(curl -s -X POST "$FASTAPI_URL/forecast?product_id=Cat1&horizon=14" \
-          -H "X-API-Key: $API_KEY" \
-          -H "Content-Type: application/json" \
-          -w "\n%{http_code}")
-        
-        http_code=$(echo "$response" | tail -n 1)
-        body=$(echo "$response" | head -n -1)
-        
-        if [ "$http_code" -eq 200 ]; then
-          echo "✅ Forecast endpoint: $http_code"
-          echo "Response preview:"
-          echo "$body" | head -c 200
-        else
-          echo "❌ Forecast endpoint failed: $http_code"
-          echo "Response: $body"
-          exit 1
-        fi
-    
-    - name: Integration Test Summary
+    - name: Test Summary
       run: |
         echo ""
-        echo "🎉 All integration tests passed!"
+        echo "✅ FastAPI unit tests passed!"
         echo ""
-        echo "✅ FastAPI health check working"
-        echo "✅ Forecast endpoint working"
-        echo "✅ Databricks connection verified"
-        echo ""
-        echo "Ready for production deployment!"
+        echo "📊 Changes detected in: fastapi-gateway/"
+        echo "🔄 Deploy-staging workflow will handle deployment"
