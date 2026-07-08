@@ -1,4 +1,4 @@
-name: Test FastAPI
+name: FastAPI Gateway Tests
 
 on:
   push:

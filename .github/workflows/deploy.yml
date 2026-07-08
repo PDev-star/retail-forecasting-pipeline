@@ -1,5 +1,11 @@
 name: Deploy to Production
 
+# This workflow runs when code is pushed to main branch
+# 
+# NOTE: Configure your Render production service with "After CI Checks Pass"
+# so it auto-deploys only when tests pass. This workflow serves as a
+# deployment confirmation and provides manual trigger option.
+
 on:
   push:
     branches: [ main ]
@@ -7,10 +13,10 @@ on:
 
 jobs:
   # ============================================================
-  # DEPLOYMENT (Only runs if all tests passed in other workflows)
+  # DEPLOYMENT CONFIRMATION
   # ============================================================
   
-  deploy-production:
+  confirm-deployment:
     runs-on: ubuntu-latest
     
     steps:
@@ -18,42 +24,48 @@ jobs:
     
     - name: Production Deployment Notice
       run: |
-        echo "🚀 Deploying to Production Environment"
+        echo "🚀 Production Deployment Confirmed"
         echo "Branch: ${{ github.ref }}"
         echo "Commit: ${{ github.sha }}"
         echo "Author: ${{ github.actor }}"
         echo ""
-        echo "⚠️  This workflow assumes tests passed in test-*.yml workflows"
-        echo "   GitHub branch protection rules should enforce this"
+        echo "⚠️  Ensure branch protection rules are enabled on main!"
+        echo "   Tests must pass before merge to prevent broken deployments"
     
-    - name: Deploy FastAPI to Render Production
-      env:
-        RENDER_PROD_DEPLOY_HOOK: ${{ secrets.RENDER_PROD_DEPLOY_HOOK }}
-      run: |
-        if [ -z "$RENDER_PROD_DEPLOY_HOOK" ]; then
-          echo "❌ RENDER_PROD_DEPLOY_HOOK secret not set!"
-          echo "   Add your Render deploy hook to GitHub secrets"
-          echo "   Get it from: Render Dashboard → Your Service → Settings → Deploy Hook"
-          exit 1
-        fi
-        
-        echo "🚀 Triggering Render production deployment..."
-        curl -X POST "$RENDER_PROD_DEPLOY_HOOK"
-        echo "✅ Render deployment triggered"
-    
-    - name: Deployment Summary
+    - name: Check Branch Protection
       run: |
         echo ""
-        echo "🎉 Production Deployment Complete!"
+        echo "📋 Branch Protection Checklist:"
+        echo "  [ ] Require status checks before merging"
+        echo "      - FastAPI Gateway Tests"
+        echo "      - Streamlit App Tests"
+        echo "  [ ] Require branches to be up to date"
+        echo "  [ ] Require pull request reviews (recommended)"
         echo ""
-        echo "📦 What was deployed:"
-        echo "  • FastAPI → Render (via deploy hook)"
-        echo "  • Streamlit → Auto-deploys from GitHub"
+    
+    - name: Deployment Status
+      run: |
+        echo "📦 Production Deployment Status:"
         echo ""
-        echo "⏱️  Expected deployment time: 5-10 minutes"
+        echo "🔧 Render FastAPI:"
+        echo "  • Should be configured: Auto-deploy 'After CI Checks Pass'"
+        echo "  • Branch: main"
+        echo "  • Root Directory: fastapi-gateway"
+        echo "  • Action: Deploys automatically after CI passes ✅"
         echo ""
-        echo "🔍 Verify deployment:"
+        echo "🎨 Streamlit App:"
+        echo "  • Should be configured: Auto-deploy on push"
+        echo "  • Branch: main"
+        echo "  • Action: Auto-deploys on push ✅"
+        echo ""
+        echo "🔍 Production URLs:"
         echo "  • FastAPI: ${{ secrets.FASTAPI_PROD_URL }}/docs"
         echo "  • Streamlit: https://retail-forecasting-pipeline.streamlit.app"
         echo ""
-        echo "💡 Tip: Test manually after deployment to verify production"
+        echo "⏱️  Expected deployment time: 3-5 minutes"
+        echo ""
+        echo "💡 Post-Deployment:"
+        echo "  1. Verify FastAPI health: ${{ secrets.FASTAPI_PROD_URL }}/health"
+        echo "  2. Test Streamlit app manually"
+        echo "  3. Check error monitoring/logs"
+        echo "  4. Notify team of deployment"
