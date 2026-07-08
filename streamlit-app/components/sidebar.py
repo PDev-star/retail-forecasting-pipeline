@@ -39,12 +39,21 @@ def render_sidebar(PRODUCTS):
     st.sidebar.title("📊 Retail Forecasting Engine")
     st.sidebar.markdown("---")
     
-    selected_category = st.sidebar.selectbox(
+    # Create display name -> product_id mapping
+    product_display_map = {
+        f"{product_id}: {PRODUCTS[product_id]['name']}": product_id
+        for product_id in PRODUCTS.keys()
+    }
+    
+    # Show friendly names in UI, get back the product_id
+    selected_display_name = st.sidebar.selectbox(
         "Select Product Category",
-        options=list(PRODUCTS.keys()),
-        format_func=lambda x: f"{x}: {PRODUCTS[x]['name'][:30]}...",
+        options=list(product_display_map.keys()),
+        key="product_category",
     )
     
+    # Map back to product_id
+    selected_category = product_display_map[selected_display_name]
     product = PRODUCTS[selected_category]
     
     # Forecast Horizon
