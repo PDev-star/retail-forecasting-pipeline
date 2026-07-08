@@ -46,9 +46,9 @@ def test_products_structure(mock_streamlit):
     assert len(PRODUCTS) > 0
     for product_id, product in PRODUCTS.items():
         assert "name" in product
-        assert "category" in product
-        assert "current_stock" in product
-        assert "safety_stock" in product
+        assert "sku" in product
+        assert "product_id" in product
+        assert "color" in product
 
 
 def test_forecast_function_signature(mock_streamlit):
@@ -59,7 +59,7 @@ def test_forecast_function_signature(mock_streamlit):
     sig = inspect.signature(get_forecast)
     params = list(sig.parameters.keys())
     
-    assert "product" in params
+    assert "product_id" in params
     assert "horizon" in params
 
 
@@ -71,5 +71,6 @@ def test_stock_recommendation_signature(mock_streamlit):
     sig = inspect.signature(calculate_stock_recommendation)
     params = list(sig.parameters.keys())
     
-    assert "product" in params
-    assert "forecast_data" in params
+    assert "forecast" in params
+    assert "lead_time_days" in params
+    assert "safety_factor" in params
