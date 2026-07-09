@@ -2,22 +2,68 @@ name: FastAPI Gateway Tests
 
 on:
   push:
-    branches: [ main, staging, GitConnectionTest ]
-    paths:
-      - 'fastapi-gateway/**'
-      - '.github/workflows/test-fastapi.yml'
+    branches: [ GitConnectionTest, main, staging ]
+    # No path filters - workflow always triggers
+  
   pull_request:
     branches: [ main, staging ]
-    paths:
-      - 'fastapi-gateway/**'
-      - '.github/workflows/test-fastapi.yml'
+    # No path filters - always run on PRs
 
 jobs:
   # ============================================================
-  # UNIT TESTS ONLY (No deployment - deploy-staging.yml handles that)
+  # CHECK IF WE SHOULD RUN TESTS
+  # ============================================================
+  
+  check-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      should-test: ${{ steps.filter.outputs.should-test }}
+    
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 2  # Need previous commit for diff
+    
+    - name: Check if FastAPI files changed
+      id: filter
+      run: |
+        # On staging/main, always run tests (for deployment gate)
+        if [[ "${{ github.ref }}" == "refs/heads/staging" ]] || [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+          echo "Branch: staging or main - always run tests"
+          echo "should-test=true" >> $GITHUB_OUTPUT
+          exit 0
+        fi
+        
+        # On PRs, always run tests (for branch protection)
+        if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+          echo "Event: pull_request - always run tests"
+          echo "should-test=true" >> $GITHUB_OUTPUT
+          exit 0
+        fi
+        
+        # On GitConnectionTest, only run if FastAPI files changed
+        echo "Branch: GitConnectionTest - checking for FastAPI changes..."
+        
+        git diff --name-only HEAD^ HEAD > changed_files.txt
+        
+        if grep -qE "^fastapi-gateway/|^\.github/workflows/test-fastapi\.yml" changed_files.txt; then
+          echo "✅ FastAPI files changed - running tests"
+          echo "should-test=true" >> $GITHUB_OUTPUT
+        else
+          echo "⏩ No FastAPI changes - skipping tests"
+          echo "should-test=false" >> $GITHUB_OUTPUT
+        fi
+        
+        echo "Changed files:"
+        cat changed_files.txt
+  
+  # ============================================================
+  # UNIT TESTS
   # ============================================================
   
   unit-tests:
+    needs: check-changes
+    if: needs.check-changes.outputs.should-test == 'true'
     runs-on: ubuntu-latest
     
     steps:
@@ -44,5 +90,5 @@ jobs:
         echo ""
         echo "✅ FastAPI unit tests passed!"
         echo ""
-        echo "📊 Changes detected in: fastapi-gateway/"
-        echo "🔄 Deploy-staging workflow will handle deployment"
+        echo "Branch: ${{ github.ref }}"
+        echo "Event: ${{ github.event_name }}"
