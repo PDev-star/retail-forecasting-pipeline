@@ -148,3 +148,5 @@ This ensures:
 * All business logic is tested (services/ & utils/)
 * Coverage requirements are realistic for the architecture
 * Deployment blocked if tests fail
+
+<!-- Trigger CI for workflow changes -->

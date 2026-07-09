@@ -57,3 +57,5 @@ curl -X POST "https://retail-forecast-api.onrender.com/forecast?product_id=Cat1&
 
 - **FREE** (750 hrs/month on Render.com)
 - No credit card required
+
+<!-- Trigger CI for workflow changes -->

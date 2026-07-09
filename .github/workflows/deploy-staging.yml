@@ -1,18 +1,19 @@
 name: Deploy to Staging
 
-# This workflow WAITS for BOTH test workflows to complete
-# It will only run after FastAPI Gateway Tests AND Streamlit App Tests finish
-# If either test fails, this workflow fails too (no deployment)
+# This workflow runs ONLY when code is merged to staging
+# It waits for BOTH test workflows to complete successfully
+# Then explicitly triggers Render deployment via deploy hook
 #
-# NOTE: Since Render is configured with "After CI Checks Pass",
-# it will auto-deploy when both tests pass. This workflow serves as
-# a deployment confirmation and can trigger manual deployments if needed.
+# DEPLOYMENT TRIGGER:
+# - Merge PR to staging → tests run → this workflow runs → calls Render hook
+# - Single, explicit deployment path (no "After CI Checks Pass" confusion)
+# - We control exactly when deployment happens
 
 on:
   workflow_run:
     workflows: ["FastAPI Gateway Tests", "Streamlit App Tests"]
     types: [completed]
-    branches: [staging]  # Only staging triggers deployment
+    branches: [staging]  # Only runs for staging branch updates (merges)
 
 jobs:
   # ============================================================
@@ -28,6 +29,8 @@ jobs:
     
     steps:
     - uses: actions/checkout@v4
+      with:
+        ref: ${{ github.event.workflow_run.head_sha }}
     
     - name: Check Both Test Workflows
       id: check-both
@@ -94,46 +97,68 @@ jobs:
       run: |
         echo "📊 Test Status Summary:"
         echo "  Commit: ${{ github.event.workflow_run.head_sha }}"
+        echo "  Branch: ${{ github.event.workflow_run.head_branch }}"
         echo "  ✅ FastAPI Tests: PASSED"
         echo "  ✅ Streamlit Tests: PASSED (97.45% coverage)"
         echo ""
-        echo "🚀 Staging deployment will proceed automatically!"
+        echo "🚀 All tests passed - proceeding with staging deployment!"
+  
+  # ============================================================
+  # DEPLOY TO RENDER
+  # ============================================================
+  
+  deploy-render:
+    needs: check-tests
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Trigger Render Deployment
+      run: |
+        echo "🚀 Triggering Render staging deployment"
+        echo "Commit: ${{ github.event.workflow_run.head_sha }}"
+        echo "Branch: ${{ github.event.workflow_run.head_branch }}"
+        echo ""
+        
+        response=$(curl -s -o /dev/null -w "%{http_code}" -X POST "${{ secrets.RENDER_DEV_DEPLOY_HOOK }}")
+        
+        if [ "$response" -eq 200 ] || [ "$response" -eq 201 ]; then
+          echo "✅ Render deploy hook called successfully (HTTP $response)"
+          echo "Render will now build and deploy from staging branch"
+        else
+          echo "❌ Deploy hook failed with HTTP $response"
+          exit 1
+        fi
   
   # ============================================================
   # DEPLOYMENT CONFIRMATION
   # ============================================================
   
   confirm-deployment:
-    needs: check-tests
+    needs: [check-tests, deploy-render]
     runs-on: ubuntu-latest
     
     steps:
-    - uses: actions/checkout@v4
-      with:
-        ref: ${{ github.event.workflow_run.head_sha }}
-    
-    - name: Staging Deployment Notice
+    - name: Staging Deployment Summary
       run: |
-        echo "🚀 Staging Deployment Confirmed"
-        echo "Branch: ${{ github.event.workflow_run.head_branch }}"
-        echo "Commit: ${{ github.event.workflow_run.head_sha }}"
+        echo "✅ Staging Deployment Triggered Successfully"
         echo ""
-        echo "✅ Both tests passed - Auto-deployment in progress:"
-        echo ""
-        echo "📦 Render FastAPI:"
-        echo "  • Configured: Auto-deploy 'After CI Checks Pass'"
+        echo "📦 Deployment Details:"
         echo "  • Branch: staging"
-        echo "  • Root Directory: fastapi-gateway"
-        echo "  • Status: Will deploy automatically now that CI passed ✅"
+        echo "  • Commit: ${{ github.event.workflow_run.head_sha }}"
+        echo "  • FastAPI Tests: PASSED ✅"
+        echo "  • Streamlit Tests: PASSED ✅ (97.45% coverage)"
         echo ""
-        echo "📦 Streamlit App:"
-        echo "  • Configured: Auto-deploy on push"
-        echo "  • Branch: staging"
-        echo "  • Status: Already deployed ✅"
+        echo "🚀 Services Deploying:"
+        echo "  • Render FastAPI: Deploy hook called ✅"
+        echo "  • Streamlit App: Auto-deployed from staging ✅"
         echo ""
         echo "🔍 Staging URLs:"
         echo "  • FastAPI: ${{ secrets.FASTAPI_DEV_URL }}/docs"
         echo "  • Streamlit: https://retail-forecasting-pipeline-staging.streamlit.app"
         echo ""
         echo "⏱️  Expected deployment time: 3-5 minutes"
-        echo "✅ All tests passed (97.45% coverage)"
+        echo ""
+        echo "📋 Next Steps:"
+        echo "  1. Monitor Render dashboard for build progress"
+        echo "  2. Test staging environment"
+        echo "  3. When ready, merge staging → main for production"
