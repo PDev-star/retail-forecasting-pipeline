@@ -24,11 +24,23 @@ jobs:
         pip install -r requirements.txt
         pip install -r requirements-dev.txt
     
-    - name: Run FastAPI unit tests
+    - name: Run FastAPI unit tests with coverage
       run: |
         cd fastapi-gateway
-        pytest tests/ -v --tb=short
+        pytest tests/ -v --tb=short \
+          --cov=. --cov-report=term --cov-report=html
+    
+    - name: Check coverage threshold
+      run: |
+        cd fastapi-gateway
+        coverage report --fail-under=80
+    
+    - name: Upload coverage report
+      uses: actions/upload-artifact@v4
+      with:
+        name: fastapi-coverage-report
+        path: fastapi-gateway/htmlcov/
     
     - name: Test Summary
       run: |
-        echo "✅ FastAPI unit tests passed!"
+        echo "✅ FastAPI unit tests passed with coverage above 80%!"
