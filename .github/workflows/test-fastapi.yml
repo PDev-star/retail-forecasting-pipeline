@@ -2,21 +2,11 @@ name: FastAPI Gateway Tests
 
 on:
   push:
-    branches: [ main, staging, GitConnectionTest ]
-    paths:
-      - 'fastapi-gateway/**'
-      - '.github/workflows/test-fastapi.yml'
+    branches: [ GitConnectionTest, main, staging ]
   pull_request:
     branches: [ main, staging ]
-    paths:
-      - 'fastapi-gateway/**'
-      - '.github/workflows/test-fastapi.yml'
 
 jobs:
-  # ============================================================
-  # UNIT TESTS ONLY (No deployment - deploy-staging.yml handles that)
-  # ============================================================
-  
   unit-tests:
     runs-on: ubuntu-latest
     
@@ -41,8 +31,4 @@ jobs:
     
     - name: Test Summary
       run: |
-        echo ""
         echo "✅ FastAPI unit tests passed!"
-        echo ""
-        echo "📊 Changes detected in: fastapi-gateway/"
-        echo "🔄 Deploy-staging workflow will handle deployment"

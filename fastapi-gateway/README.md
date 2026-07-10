@@ -58,4 +58,10 @@ curl -X POST "https://retail-forecast-api.onrender.com/forecast?product_id=Cat1&
 - **FREE** (750 hrs/month on Render.com)
 - No credit card required
 
-<!-- Trigger CI for workflow changes -->
+## CI/CD Pipeline
+
+- ✅ Automated testing on every push
+- ✅ Deploy to staging when tests pass
+- ✅ Full end-to-end deployment workflow
+
+<!-- Test deploy-staging.yml workflow trigger -->
