@@ -3,67 +3,11 @@ name: Streamlit App Tests
 on:
   push:
     branches: [ GitConnectionTest, main, staging ]
-    # No path filters - workflow always triggers
-  
   pull_request:
     branches: [ main, staging ]
-    # No path filters - always run on PRs
 
 jobs:
-  # ============================================================
-  # CHECK IF WE SHOULD RUN TESTS
-  # ============================================================
-  
-  check-changes:
-    runs-on: ubuntu-latest
-    outputs:
-      should-test: ${{ steps.filter.outputs.should-test }}
-    
-    steps:
-    - uses: actions/checkout@v4
-      with:
-        fetch-depth: 2  # Need previous commit for diff
-    
-    - name: Check if Streamlit files changed
-      id: filter
-      run: |
-        # On staging/main, always run tests (for deployment gate)
-        if [[ "${{ github.ref }}" == "refs/heads/staging" ]] || [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
-          echo "Branch: staging or main - always run tests"
-          echo "should-test=true" >> $GITHUB_OUTPUT
-          exit 0
-        fi
-        
-        # On PRs, always run tests (for branch protection)
-        if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-          echo "Event: pull_request - always run tests"
-          echo "should-test=true" >> $GITHUB_OUTPUT
-          exit 0
-        fi
-        
-        # On GitConnectionTest, only run if Streamlit files changed
-        echo "Branch: GitConnectionTest - checking for Streamlit changes..."
-        
-        git diff --name-only HEAD^ HEAD > changed_files.txt
-        
-        if grep -qE "^streamlit-app/|^\.github/workflows/test-streamlit\.yml" changed_files.txt; then
-          echo "✅ Streamlit files changed - running tests"
-          echo "should-test=true" >> $GITHUB_OUTPUT
-        else
-          echo "⏩ No Streamlit changes - skipping tests"
-          echo "should-test=false" >> $GITHUB_OUTPUT
-        fi
-        
-        echo "Changed files:"
-        cat changed_files.txt
-  
-  # ============================================================
-  # UNIT AND INTEGRATION TESTS
-  # ============================================================
-  
   test:
-    needs: check-changes
-    if: needs.check-changes.outputs.should-test == 'true'
     runs-on: ubuntu-latest
     
     steps:
@@ -101,11 +45,6 @@ jobs:
     - name: Check coverage threshold
       run: |
         cd streamlit-app
-        # RFP S2-D-02 requirement: ≥80% code coverage
-        # Architecture: Smart guard pattern with AppTest integration tests
-        # - Unit tests (30): Fast business logic tests
-        # - Integration tests (16): Full UI workflow tests with AppTest
-        # - Total: 46 tests achieving 97.45% coverage
         coverage report --fail-under=80
     
     - name: Upload coverage report
@@ -116,8 +55,4 @@ jobs:
     
     - name: Test Summary
       run: |
-        echo ""
         echo "✅ Streamlit tests passed with 97.45% coverage!"
-        echo ""
-        echo "Branch: ${{ github.ref }}"
-        echo "Event: ${{ github.event_name }}"
