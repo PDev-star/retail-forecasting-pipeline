@@ -33,14 +33,16 @@ jobs:
         pytest tests/test_api_client.py tests/test_app.py tests/test_config.py tests/test_inventory.py \
           --cov=. --cov-report= -v
     
-    - name: Run integration tests with coverage
+    - name: Run integration tests with coverage (isolated)
       env:
         APPTEST_MODE: 1
         PYTHONPATH: .
       run: |
         cd streamlit-app
+        # Run integration tests with forked processes to avoid PyArrow segfault
         pytest tests/test_ui_integration.py \
-          --cov=. --cov-append --cov-report=term --cov-report=html -v
+          --cov=. --cov-append --cov-report=term --cov-report=html -v \
+          --forked
     
     - name: Check coverage threshold
       run: |
