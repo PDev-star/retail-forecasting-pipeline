@@ -5,3 +5,4 @@ streamlit==1.32.0
 pandas==2.1.4
 plotly==5.19.0
 requests==2.31.0
+pyarrow==15.0.2  # Pin to avoid segfault bugs in newer versions

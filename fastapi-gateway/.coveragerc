@@ -1,0 +1,42 @@
+[run]
+source = .
+omit =
+    */tests/*
+    */test_*.py
+    */__pycache__/*
+    */venv/*
+    */env/*
+
+[report]
+# Exclude lines that can't be tested
+exclude_lines =
+    # Standard pragmas
+    pragma: no cover
+    
+    # Defensive programming
+    def __repr__
+    raise AssertionError
+    raise NotImplementedError
+    
+    # FastAPI startup (lifespan events)
+    @app.on_event
+    if __name__ == .__main__.:
+    
+    # Type checking
+    if TYPE_CHECKING:
+    
+    # Debug code
+    if settings.DEBUG
+    
+    # Exception handlers
+    @app.exception_handler
+    
+    # Import fallbacks
+    except ImportError:
+
+precision = 2
+show_missing = True
+skip_covered = False
+
+[html]
+directory = htmlcov
