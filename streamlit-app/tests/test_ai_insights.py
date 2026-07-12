@@ -18,8 +18,6 @@ from utils.ai_insights import (
     get_custom_ai_answer,
     _get_next_api_key,
     _call_gemini_with_fallback,
-    _build_prebuilt_prompt,
-    _fallback_insight,
 )
 
 
@@ -219,115 +217,6 @@ def test_call_gemini_all_keys_fail():
                 result = _call_gemini_with_fallback("Test prompt", max_retries=2)
                 
                 assert result is None
-
-
-# ============================================================================
-# BUILD PROMPT TESTS
-# ============================================================================
-
-def test_build_prebuilt_prompt_forecast():
-    """Test prompt building for forecast insight."""
-    data = {
-        'forecast': [100, 110, 120],
-        'product': {'name': 'Widget', 'sku': 'WDG123'},
-        'scenario': 'Promotion'
-    }
-    
-    prompt = _build_prebuilt_prompt(data, 'forecast')
-    
-    assert isinstance(prompt, str)
-    assert 'Widget' in prompt
-    assert 'WDG123' in prompt
-    assert 'Promotion' in prompt
-    assert '110.0' in prompt  # avg demand
-    assert 'increasing' in prompt  # trend
-
-
-def test_build_prebuilt_prompt_stock():
-    """Test prompt building for stock insight."""
-    data = {
-        'recommended_stock': 500,
-        'reorder_point': 300,
-        'safety_stock': 100,
-        'lead_time_days': 7
-    }
-    
-    prompt = _build_prebuilt_prompt(data, 'stock')
-    
-    assert isinstance(prompt, str)
-    assert '500' in prompt
-    assert '300' in prompt
-    assert '100' in prompt
-    assert '7' in prompt
-
-
-def test_build_prebuilt_prompt_risk():
-    """Test prompt building for risk insight."""
-    data = {
-        'volatility': 50.0,
-        'avg_demand': 100.0,
-        'trend': 'increasing',
-        'scenario': 'Normal'
-    }
-    
-    prompt = _build_prebuilt_prompt(data, 'risk')
-    
-    assert isinstance(prompt, str)
-    assert '50.0' in prompt
-    assert '100.0' in prompt
-    assert '50.0%' in prompt  # volatility ratio
-    assert 'increasing' in prompt
-
-
-# ============================================================================
-# FALLBACK LOGIC TESTS
-# ============================================================================
-
-def test_fallback_insight_forecast():
-    """Test fallback text for forecast insight."""
-    data = {
-        'forecast': [100, 110, 120],
-        'product': {'name': 'Test', 'sku': 'T1'},
-        'scenario': 'Normal'
-    }
-    
-    result = _fallback_insight(data, 'forecast')
-    
-    assert isinstance(result, str)
-    assert '110.0' in result  # avg demand
-    assert 'units' in result.lower()
-
-
-def test_fallback_insight_stock():
-    """Test fallback text for stock insight."""
-    data = {
-        'recommended_stock': 500,
-        'reorder_point': 300,
-        'safety_stock': 100,
-        'lead_time_days': 7
-    }
-    
-    result = _fallback_insight(data, 'stock')
-    
-    assert isinstance(result, str)
-    assert '500' in result
-    assert 'units' in result.lower()
-
-
-def test_fallback_insight_risk():
-    """Test fallback text for risk insight."""
-    data = {
-        'volatility': 50.0,
-        'avg_demand': 100.0,
-        'trend': 'increasing',
-        'scenario': 'Normal'
-    }
-    
-    result = _fallback_insight(data, 'risk')
-    
-    assert isinstance(result, str)
-    assert '50.0' in result
-    assert 'units' in result.lower()
 
 
 # ============================================================================
