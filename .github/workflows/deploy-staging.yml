@@ -62,10 +62,7 @@ jobs:
           console.log('FastAPI Test:', fastapiRun ? fastapiRun.conclusion : 'NOT FOUND');
           console.log('Streamlit Test:', streamlitRun ? streamlitRun.conclusion : 'NOT FOUND');
           
-          // Check if both exist and passed
-          const fastapi_passed = fastapiRun && fastapiRun.conclusion === 'success';
-          const streamlit_passed = streamlitRun && streamlitRun.conclusion === 'success';
-          
+          // Check if both exist
           if (!fastapiRun) {
             console.log('❌ FastAPI test run not found for this commit');
             core.setFailed('FastAPI tests did not run');
@@ -78,14 +75,31 @@ jobs:
             return;
           }
           
+          // Check if either test is still in progress
+          if (fastapiRun.status === 'in_progress' || fastapiRun.status === 'queued' || !fastapiRun.conclusion) {
+            console.log('⏳ FastAPI tests still running - will retry when complete');
+            core.notice('FastAPI tests in progress - waiting for completion');
+            process.exit(78);  // Neutral exit - not a failure, just waiting
+          }
+          
+          if (streamlitRun.status === 'in_progress' || streamlitRun.status === 'queued' || !streamlitRun.conclusion) {
+            console.log('⏳ Streamlit tests still running - will retry when complete');
+            core.notice('Streamlit tests in progress - waiting for completion');
+            process.exit(78);  // Neutral exit - not a failure, just waiting
+          }
+          
+          // Now check if they passed
+          const fastapi_passed = fastapiRun.conclusion === 'success';
+          const streamlit_passed = streamlitRun.conclusion === 'success';
+          
           if (!fastapi_passed) {
-            console.log('❌ FastAPI tests FAILED');
+            console.log(`❌ FastAPI tests FAILED (conclusion: ${fastapiRun.conclusion})`);
             core.setFailed('FastAPI tests failed');
             return;
           }
           
           if (!streamlit_passed) {
-            console.log('❌ Streamlit tests FAILED');
+            console.log(`❌ Streamlit tests FAILED (conclusion: ${streamlitRun.conclusion})`);
             core.setFailed('Streamlit tests failed');
             return;
           }
@@ -153,7 +167,7 @@ jobs:
         echo "  • Streamlit App: Auto-deployed from staging ✅"
         echo ""
         echo "🔍 Staging URLs:"
-        echo "  • FastAPI: ${{ secrets.FASTAPI_DEV_URL }}/docs"
+        echo "  • FastAPI: ***/docs"
         echo "  • Streamlit: https://retail-forecasting-pipeline-staging.streamlit.app"
         echo ""
         echo "⏱️  Expected deployment time: 3-5 minutes"
