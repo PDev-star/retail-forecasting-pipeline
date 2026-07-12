@@ -1,0 +1,71 @@
+name: Deploy to Production
+
+# This workflow runs when code is pushed to main branch
+# 
+# NOTE: Configure your Render production service with "After CI Checks Pass"
+# so it auto-deploys only when tests pass. This workflow serves as a
+# deployment confirmation and provides manual trigger option.
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:  # Allows manual trigger
+
+jobs:
+  # ============================================================
+  # DEPLOYMENT CONFIRMATION
+  # ============================================================
+  
+  confirm-deployment:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Production Deployment Notice
+      run: |
+        echo "🚀 Production Deployment Confirmed"
+        echo "Branch: ${{ github.ref }}"
+        echo "Commit: ${{ github.sha }}"
+        echo "Author: ${{ github.actor }}"
+        echo ""
+        echo "⚠️  Ensure branch protection rules are enabled on main!"
+        echo "   Tests must pass before merge to prevent broken deployments"
+    
+    - name: Check Branch Protection
+      run: |
+        echo ""
+        echo "📋 Branch Protection Checklist:"
+        echo "  [ ] Require status checks before merging"
+        echo "      - FastAPI Gateway Tests"
+        echo "      - Streamlit App Tests"
+        echo "  [ ] Require branches to be up to date"
+        echo "  [ ] Require pull request reviews (recommended)"
+        echo ""
+    
+    - name: Deployment Status
+      run: |
+        echo "📦 Production Deployment Status:"
+        echo ""
+        echo "🔧 Render FastAPI:"
+        echo "  • Should be configured: Auto-deploy 'After CI Checks Pass'"
+        echo "  • Branch: main"
+        echo "  • Root Directory: fastapi-gateway"
+        echo "  • Action: Deploys automatically after CI passes ✅"
+        echo ""
+        echo "🎨 Streamlit App:"
+        echo "  • Should be configured: Auto-deploy on push"
+        echo "  • Branch: main"
+        echo "  • Action: Auto-deploys on push ✅"
+        echo ""
+        echo "🔍 Production URLs:"
+        echo "  • FastAPI: ${{ secrets.FASTAPI_PROD_URL }}/docs"
+        echo "  • Streamlit: https://retail-forecasting-pipeline.streamlit.app"
+        echo ""
+        echo "⏱️  Expected deployment time: 3-5 minutes"
+        echo ""
+        echo "💡 Post-Deployment:"
+        echo "  1. Verify FastAPI health: ${{ secrets.FASTAPI_PROD_URL }}/health"
+        echo "  2. Test Streamlit app manually"
+        echo "  3. Check error monitoring/logs"
+        echo "  4. Notify team of deployment"

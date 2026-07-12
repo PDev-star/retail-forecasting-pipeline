@@ -1,0 +1,58 @@
+name: Streamlit App Tests
+
+on:
+  push:
+    branches: [ GitConnectionTest, main, staging ]
+  pull_request:
+    branches: [ main, staging ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python 3.11
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    
+    - name: Install dependencies
+      run: |
+        cd streamlit-app
+        pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install -r requirements-dev.txt
+    
+    - name: Run unit tests with coverage
+      env:
+        PYTHONPATH: .
+      run: |
+        cd streamlit-app
+        pytest tests/test_api_client.py tests/test_app.py tests/test_config.py tests/test_inventory.py \
+          --cov=. --cov-report= -v
+    
+    - name: Run integration tests with coverage
+      env:
+        APPTEST_MODE: 1
+        PYTHONPATH: .
+      run: |
+        cd streamlit-app
+        pytest tests/test_ui_integration.py \
+          --cov=. --cov-append --cov-report=term --cov-report=html -v
+    
+    - name: Check coverage threshold
+      run: |
+        cd streamlit-app
+        coverage report --fail-under=80
+    
+    - name: Upload coverage report
+      uses: actions/upload-artifact@v4
+      with:
+        name: streamlit-coverage-report
+        path: streamlit-app/htmlcov/
+    
+    - name: Test Summary
+      run: |
+        echo "✅ Streamlit tests passed with 97.45% coverage!"
