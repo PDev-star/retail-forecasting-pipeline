@@ -97,8 +97,12 @@ def get_forecast_insight(data: Dict[str, Any]) -> str:
     product = data['product']
     scenario = data.get('scenario', 'Normal conditions')
     
+    # Handle edge case: empty forecast
+    if not forecast:
+        return """📊 **Forecast Summary:** No forecast data available. Please generate a forecast first to see AI insights."""
+    
     avg_demand = sum(forecast) / len(forecast)
-    trend = "increasing" if forecast[-1] > forecast[0] else "decreasing"
+    trend = "increasing" if len(forecast) > 1 and forecast[-1] > forecast[0] else "stable" if len(forecast) == 1 else "decreasing"
     max_demand = max(forecast)
     min_demand = min(forecast)
     
@@ -241,7 +245,7 @@ def get_custom_ai_answer(question: str, context: Dict[str, Any]) -> str:
     stock_data = context.get('stock_data', {})
     
     avg_demand = sum(forecast) / len(forecast) if forecast else 0
-    trend = "increasing" if forecast and forecast[-1] > forecast[0] else "decreasing"
+    trend = "increasing" if forecast and len(forecast) > 1 and forecast[-1] > forecast[0] else "stable" if len(forecast) == 1 else "decreasing"
     
     # META-PROMPT: Let Gemini understand the question and frame its own answer
     meta_prompt = f"""

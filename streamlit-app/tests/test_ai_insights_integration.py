@@ -71,10 +71,10 @@ def test_render_insights_tab_loads_without_crash():
     scenario_desc = 'Normal conditions'
     lead_time_days = 7
     
-    # Mock AI functions to return test responses
-    with patch('components.tabs.get_forecast_insight', return_value="Test forecast insight"):
-        with patch('components.tabs.get_stock_insight', return_value="Test stock insight"):
-            with patch('components.tabs.get_risk_insight', return_value="Test risk insight"):
+    # Mock AI functions to return test responses (patch at source module)
+    with patch('utils.ai_insights.get_forecast_insight', return_value="Test forecast insight"):
+        with patch('utils.ai_insights.get_stock_insight', return_value="Test stock insight"):
+            with patch('utils.ai_insights.get_risk_insight', return_value="Test risk insight"):
                 # Should not crash
                 render_insights_tab(forecast, product, scenario_desc, lead_time_days, calculate_stock_recommendation)
     
@@ -92,9 +92,9 @@ def test_render_insights_tab_shows_three_expanders():
     mock_st_local = MockStreamlit()
     
     with patch('components.tabs.st', mock_st_local):
-        with patch('components.tabs.get_forecast_insight', return_value="Forecast AI"):
-            with patch('components.tabs.get_stock_insight', return_value="Stock AI"):
-                with patch('components.tabs.get_risk_insight', return_value="Risk AI"):
+        with patch('utils.ai_insights.get_forecast_insight', return_value="Forecast AI"):
+            with patch('utils.ai_insights.get_stock_insight', return_value="Stock AI"):
+                with patch('utils.ai_insights.get_risk_insight', return_value="Risk AI"):
                     render_insights_tab(forecast, product, scenario_desc, lead_time_days, calculate_stock_recommendation)
     
     # Should have 4 expanders: 3 insights + 1 technical details
@@ -118,9 +118,9 @@ def test_render_insights_tab_shows_custom_qna():
     mock_st_local = MockStreamlit()
     
     with patch('components.tabs.st', mock_st_local):
-        with patch('components.tabs.get_forecast_insight', return_value="AI insight"):
-            with patch('components.tabs.get_stock_insight', return_value="AI insight"):
-                with patch('components.tabs.get_risk_insight', return_value="AI insight"):
+        with patch('utils.ai_insights.get_forecast_insight', return_value="AI insight"):
+            with patch('utils.ai_insights.get_stock_insight', return_value="AI insight"):
+                with patch('utils.ai_insights.get_risk_insight', return_value="AI insight"):
                     render_insights_tab(forecast, product, scenario_desc, lead_time_days, calculate_stock_recommendation)
     
     # Should have text_area for custom question
@@ -140,9 +140,9 @@ def test_render_insights_tab_with_fallback_ai():
     lead_time_days = 5
     
     # Mock AI to return fallback text (simulating API failure)
-    with patch('components.tabs.get_forecast_insight', return_value="📊 Fallback text"):
-        with patch('components.tabs.get_stock_insight', return_value="🎯 Fallback text"):
-            with patch('components.tabs.get_risk_insight', return_value="⚠️ Fallback text"):
+    with patch('utils.ai_insights.get_forecast_insight', return_value="📊 Fallback text"):
+        with patch('utils.ai_insights.get_stock_insight', return_value="🎯 Fallback text"):
+            with patch('utils.ai_insights.get_risk_insight', return_value="⚠️ Fallback text"):
                 # Should not crash
                 render_insights_tab(forecast, product, scenario_desc, lead_time_days, calculate_stock_recommendation)
     
@@ -157,9 +157,9 @@ def test_render_insights_tab_with_empty_forecast():
     scenario_desc = 'Test'
     lead_time_days = 5
     
-    with patch('components.tabs.get_forecast_insight', return_value="No data"):
-        with patch('components.tabs.get_stock_insight', return_value="No data"):
-            with patch('components.tabs.get_risk_insight', return_value="No data"):
+    with patch('utils.ai_insights.get_forecast_insight', return_value="No data"):
+        with patch('utils.ai_insights.get_stock_insight', return_value="No data"):
+            with patch('utils.ai_insights.get_risk_insight', return_value="No data"):
                 # Should not crash even with empty forecast
                 try:
                     render_insights_tab(forecast, product, scenario_desc, lead_time_days, calculate_stock_recommendation)
@@ -178,9 +178,9 @@ def test_render_insights_tab_calls_ai_functions():
     scenario_desc = 'Test'
     lead_time_days = 5
     
-    with patch('components.tabs.get_forecast_insight') as mock_forecast:
-        with patch('components.tabs.get_stock_insight') as mock_stock:
-            with patch('components.tabs.get_risk_insight') as mock_risk:
+    with patch('utils.ai_insights.get_forecast_insight') as mock_forecast:
+        with patch('utils.ai_insights.get_stock_insight') as mock_stock:
+            with patch('utils.ai_insights.get_risk_insight') as mock_risk:
                 mock_forecast.return_value = "AI 1"
                 mock_stock.return_value = "AI 2"
                 mock_risk.return_value = "AI 3"
@@ -200,9 +200,9 @@ def test_render_insights_tab_passes_correct_data():
     scenario_desc = 'Promotion'
     lead_time_days = 7
     
-    with patch('components.tabs.get_forecast_insight') as mock_forecast:
-        with patch('components.tabs.get_stock_insight') as mock_stock:
-            with patch('components.tabs.get_risk_insight') as mock_risk:
+    with patch('utils.ai_insights.get_forecast_insight') as mock_forecast:
+        with patch('utils.ai_insights.get_stock_insight') as mock_stock:
+            with patch('utils.ai_insights.get_risk_insight') as mock_risk:
                 mock_forecast.return_value = "AI"
                 mock_stock.return_value = "AI"
                 mock_risk.return_value = "AI"
@@ -236,10 +236,10 @@ def test_render_insights_tab_custom_qna_button_not_clicked():
     mock_st_local = MockStreamlit()
     
     with patch('components.tabs.st', mock_st_local):
-        with patch('components.tabs.get_forecast_insight', return_value="AI"):
-            with patch('components.tabs.get_stock_insight', return_value="AI"):
-                with patch('components.tabs.get_risk_insight', return_value="AI"):
-                    with patch('components.tabs.get_custom_ai_answer') as mock_custom:
+        with patch('utils.ai_insights.get_forecast_insight', return_value="AI"):
+            with patch('utils.ai_insights.get_stock_insight', return_value="AI"):
+                with patch('utils.ai_insights.get_risk_insight', return_value="AI"):
+                    with patch('utils.ai_insights.get_custom_ai_answer') as mock_custom:
                         render_insights_tab(forecast, product, scenario_desc, lead_time_days, calculate_stock_recommendation)
                         
                         # Custom AI should NOT be called (button not clicked)

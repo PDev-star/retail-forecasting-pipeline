@@ -99,6 +99,7 @@ def test_insights_with_empty_forecast():
     # Should not crash
     result = get_forecast_insight(data)
     assert isinstance(result, str)
+    assert 'No forecast data available' in result or len(result) > 0
 
 
 def test_insights_with_single_value_forecast():
@@ -296,10 +297,12 @@ def test_get_custom_ai_answer_with_successful_api():
         'stock_data': {'recommended_stock': 500}
     }
     
-    with patch.object(ai_insights, '_call_gemini_with_fallback', return_value="Yes, increase safety stock by 20%."):
-        result = get_custom_ai_answer(question, context)
-        
-        assert result == "Yes, increase safety stock by 20%."
+    # Must patch GEMINI_API_KEYS first (early exit check)
+    with patch.object(ai_insights, 'GEMINI_API_KEYS', ['test_key']):
+        with patch.object(ai_insights, '_call_gemini_with_fallback', return_value="Yes, increase safety stock by 20%."):
+            result = get_custom_ai_answer(question, context)
+            
+            assert result == "Yes, increase safety stock by 20%."
 
 
 def test_get_custom_ai_answer_no_keys_configured():
