@@ -2,7 +2,7 @@ name: Streamlit App Tests
 
 on:
   push:
-    branches: [ GitConnectionTest, main, staging ]
+    branches: [ GitConnectionTest, main, staging, Feature-Branch---AI-insights-in-Streamlit ]
   pull_request:
     branches: [ main, staging ]
 
