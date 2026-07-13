@@ -163,7 +163,17 @@ def get_forecast_insight(data: Dict[str, Any]) -> str:
         return """📊 **Forecast Summary:** No forecast data available. Please generate a forecast first to see AI insights."""
     
     avg_demand = sum(forecast) / len(forecast)
-    trend = "increasing" if len(forecast) > 1 and forecast[-1] > forecast[0] else "stable" if len(forecast) == 1 else "decreasing"
+    
+    # Fix trend calculation: handle equal values as "stable"
+    if len(forecast) == 1:
+        trend = "stable"
+    elif forecast[-1] > forecast[0]:
+        trend = "increasing"
+    elif forecast[-1] < forecast[0]:
+        trend = "decreasing"
+    else:  # forecast[-1] == forecast[0]
+        trend = "stable"
+    
     max_demand = max(forecast)
     min_demand = min(forecast)
     
@@ -313,7 +323,18 @@ No API keys configured. Please add GEMINI_API_KEY to environment variables.
     stock_data = context.get('stock_data', {})
     
     avg_demand = sum(forecast) / len(forecast) if forecast else 0
-    trend = "increasing" if forecast and len(forecast) > 1 and forecast[-1] > forecast[0] else "stable" if len(forecast) == 1 else "decreasing"
+    
+    # Fix trend calculation: handle equal values as "stable" (same as get_forecast_insight)
+    if not forecast:
+        trend = "unknown"
+    elif len(forecast) == 1:
+        trend = "stable"
+    elif forecast[-1] > forecast[0]:
+        trend = "increasing"
+    elif forecast[-1] < forecast[0]:
+        trend = "decreasing"
+    else:  # forecast[-1] == forecast[0]
+        trend = "stable"
     
     # META-PROMPT: Let Gemini understand the question and frame its own answer
     meta_prompt = f"""
