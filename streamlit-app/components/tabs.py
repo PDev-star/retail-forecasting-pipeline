@@ -101,9 +101,9 @@ def render_stock_tab(forecast, lead_time_days, calculate_stock_recommendation):
 
 
 def render_insights_tab(forecast, product, scenario_desc, lead_time_days, calculate_stock_recommendation):
-    """Render the AI insights tab with REAL Gemini AI."""
+    """Render the AI insights tab with REAL Groq AI."""
     st.markdown("### 💡 AI-Powered Insights")
-    st.markdown("*Powered by Gemini 2.5 Flash - Real AI explanations in plain English*")
+    st.markdown("*Powered by Groq LLaMA 3.3 70B - Ultra-fast AI explanations in plain English*")
     st.markdown("---")
 
     # Calculate metrics
@@ -117,7 +117,7 @@ def render_insights_tab(forecast, product, scenario_desc, lead_time_days, calcul
     # =========================================================================
     # PRE-BUILT AI INSIGHTS (3 SCENARIOS - RFP REQUIREMENT)
     # =========================================================================
-    from utils.ai_insights import get_forecast_insight, get_stock_insight, get_risk_insight
+    from utils.ai_insights_groq import get_forecast_insight, get_stock_insight, get_risk_insight
     
     # Insight 1: Forecast Analysis
     with st.expander("📊 Forecast Analysis (AI-Generated)", expanded=True):
@@ -156,7 +156,7 @@ def render_insights_tab(forecast, product, scenario_desc, lead_time_days, calcul
     # =========================================================================
     # CUSTOM Q&A (ADVANCED FEATURE - GOES BEYOND RFP!)
     # =========================================================================
-    from utils.ai_insights import get_custom_ai_answer
+    from utils.ai_insights_groq import get_custom_ai_answer
     
     st.markdown("### 🤔 Ask Your Own Question")
     st.markdown("Ask anything about this forecast, and AI will answer based on the data.")
