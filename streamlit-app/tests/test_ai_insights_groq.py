@@ -136,7 +136,7 @@ def test_call_groq_success():
     mock_completion.choices[0].message.content = "AI-generated insight about demand patterns."
     
     with patch.object(ai_insights_groq, 'GROQ_API_KEY', 'test_key'):
-        with patch('groq.Groq') as mock_groq_class:
+        with patch('utils.ai_insights_groq.Groq') as mock_groq_class:
             mock_client = MagicMock()
             mock_client.chat.completions.create.return_value = mock_completion
             mock_groq_class.return_value = mock_client
@@ -151,7 +151,7 @@ def test_call_groq_api_failure():
     """Test Groq API returns None when it fails."""
     
     with patch.object(ai_insights_groq, 'GROQ_API_KEY', 'test_key'):
-        with patch('groq.Groq') as mock_groq_class:
+        with patch('utils.ai_insights_groq.Groq') as mock_groq_class:
             mock_client = MagicMock()
             mock_client.chat.completions.create.side_effect = Exception("API Error")
             mock_groq_class.return_value = mock_client
@@ -172,7 +172,7 @@ def test_get_forecast_insight_with_successful_api():
     mock_completion.choices[0].message.content = "Your demand is trending upward. Stock up now!"
     
     with patch.object(ai_insights_groq, 'GROQ_API_KEY', 'test_key'):
-        with patch('groq.Groq') as mock_groq_class:
+        with patch('utils.ai_insights_groq.Groq') as mock_groq_class:
             mock_client = MagicMock()
             mock_client.chat.completions.create.return_value = mock_completion
             mock_groq_class.return_value = mock_client
@@ -192,7 +192,7 @@ def test_get_forecast_insight_with_failed_api():
     """Test get_forecast_insight returns fallback when API fails."""
     
     with patch.object(ai_insights_groq, 'GROQ_API_KEY', 'test_key'):
-        with patch('groq.Groq') as mock_groq_class:
+        with patch('utils.ai_insights_groq.Groq') as mock_groq_class:
             mock_client = MagicMock()
             mock_client.chat.completions.create.side_effect = Exception("API Error")
             mock_groq_class.return_value = mock_client
@@ -217,7 +217,7 @@ def test_get_stock_insight_with_successful_api():
     mock_completion.choices[0].message.content = "This order size ensures 5 days of buffer stock."
     
     with patch.object(ai_insights_groq, 'GROQ_API_KEY', 'test_key'):
-        with patch('groq.Groq') as mock_groq_class:
+        with patch('utils.ai_insights_groq.Groq') as mock_groq_class:
             mock_client = MagicMock()
             mock_client.chat.completions.create.return_value = mock_completion
             mock_groq_class.return_value = mock_client
@@ -241,7 +241,7 @@ def test_get_risk_insight_with_successful_api():
     mock_completion.choices[0].message.content = "High volatility detected. Increase safety stock by 20%."
     
     with patch.object(ai_insights_groq, 'GROQ_API_KEY', 'test_key'):
-        with patch('groq.Groq') as mock_groq_class:
+        with patch('utils.ai_insights_groq.Groq') as mock_groq_class:
             mock_client = MagicMock()
             mock_client.chat.completions.create.return_value = mock_completion
             mock_groq_class.return_value = mock_client
@@ -265,7 +265,7 @@ def test_get_custom_ai_answer_with_successful_api():
     mock_completion.choices[0].message.content = "Yes, order 500 units for the next 2 weeks."
     
     with patch.object(ai_insights_groq, 'GROQ_API_KEY', 'test_key'):
-        with patch('groq.Groq') as mock_groq_class:
+        with patch('utils.ai_insights_groq.Groq') as mock_groq_class:
             mock_client = MagicMock()
             mock_client.chat.completions.create.return_value = mock_completion
             mock_groq_class.return_value = mock_client
