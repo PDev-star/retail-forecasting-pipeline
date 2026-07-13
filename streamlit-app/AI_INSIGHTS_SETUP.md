@@ -36,7 +36,8 @@ If Key 1 hits quota → automatically tries Key 2 → tries Key 3 → fallback t
 2. Sign in with your Google account
 3. Click **"Get API Key"** → **"Create API key in new project"**
 4. Copy the key (it starts with `AIza...`)
-5. Repeat for 2-3 keys (use different Google accounts or create multiple keys)
+5. **IMPORTANT:** For multiple keys, use DIFFERENT Google accounts (keys from same account share quota!)
+6. Repeat for 2-3 keys
 
 **Cost:** ₹0 (all free tier!)
 
@@ -50,7 +51,24 @@ export GEMINI_API_KEY_2="AIzaSy..."  # Optional backup
 export GEMINI_API_KEY_3="AIzaSy..."  # Optional backup
 ```
 
-#### For Render.com Deployment:
+#### For Streamlit Cloud Deployment:
+
+1. Go to your app's dashboard: https://share.streamlit.io
+2. Click on your app → **⚙️ Settings** → **Secrets**
+3. Add secrets in TOML format:
+
+```toml
+GEMINI_API_KEY = "AIzaSy..."
+GEMINI_API_KEY_2 = "AIzaSy..."
+GEMINI_API_KEY_3 = "AIzaSy..."
+```
+
+4. Click **"Save"**
+5. App will auto-redeploy
+
+**⚠️ CRITICAL:** Make sure keys are from DIFFERENT Google accounts, otherwise they share the same quota!
+
+#### For Render.com (FastAPI):
 
 1. Go to your app's dashboard on Render.com
 2. Navigate to **"Environment"** tab
@@ -75,7 +93,7 @@ streamlit run app.py
 - ✅ Try custom question: "Should I increase orders?"
 - ✅ Verify AI answer appears
 
-### Step 4: Deploy to Render.com
+### Step 4: Deploy to Staging
 
 ```bash
 git add .
@@ -83,7 +101,7 @@ git commit -m "Add real AI insights with Gemini 2.5 Flash + multi-key rotation"
 git push origin staging
 ```
 
-Render.com will auto-deploy!
+Streamlit Cloud will auto-deploy!
 
 ## How Multi-Key Rotation Works
 
@@ -98,86 +116,110 @@ GEMINI_API_KEYS = [
 
 def _call_gemini_with_fallback(prompt, max_retries=3):
     for attempt in range(max_retries):
-        api_key = _get_next_api_key()  # Round-robin
+        api_key = _get_next_api_key()
         try:
-            # Call Gemini...
+            # Call Gemini
             return response.text
-        except Exception:
-            # Try next key automatically
+        except Exception as e:
+            # Rate limit hit? Try next key
             continue
     
-    # All keys failed → use text fallback
-    return fallback_text
+    # All keys exhausted? Return fallback text
+    return "Fallback explanation..."
 ```
-
-## Fallback Behavior
-
-**If all API keys fail or are missing:**
-- Pre-built insights → show text summaries (not AI, but functional)
-- Custom Q&A → show error: "AI service unavailable"
-
-**App never crashes due to missing API keys!**
-
-## Testing Without API Keys (CI/CD)
-
-Tests in `tests/test_ai_insights.py` verify:
-- ✅ Fallback logic works
-- ✅ No crashes when keys missing
-- ✅ Functions return valid strings
-
-**CI/CD doesn't need API keys to pass tests!**
 
 ## Troubleshooting
 
-### Issue: "AI service unavailable"
-**Solution:** Check environment variables are set correctly
-
 ### Issue: "All API keys exhausted"
-**Solution:** 
-- Wait 1 minute (15 RPM limit resets)
-- Or add more API keys
-- Or wait until next day (1,500 RPD limit resets)
 
-### Issue: API keys not working on Render.com
-**Solution:** 
-1. Verify keys are added in Render.com dashboard
-2. Check for typos (keys start with `AIza`)
-3. Redeploy app after adding keys
+**Possible causes:**
+1. **Keys from same Google account** → They share quota! Use different accounts.
+2. **Heavy testing** → Wait 1 minute for RPM quota to reset, or 24h for daily quota.
+3. **Keys not configured** → Check Streamlit Cloud secrets panel.
+4. **Invalid keys** → Verify at https://aistudio.google.com/apikey
 
-## Cost Analysis
+**Solutions:**
 
-| Scenario | Keys Needed | Cost |
-|----------|-------------|------|
-| **Week 10 Demo (judges test 50 times)** | 1 key | ₹0 |
-| **Week 10 Demo (judges test 200+ times)** | 2-3 keys | ₹0 |
-| **Production (100 users/day)** | 2-3 keys | ₹0 |
-| **Production (1000+ users/day)** | Paid tier | ~₹500/month |
+1. **Check logs in Streamlit Cloud:**
+   - Click app → ⚙️ Settings → Logs
+   - Look for: `🔑 Gemini API Keys configured: X`
+   - Should see 2-3 keys, not 0!
 
-**For Week 10 demo: 2-3 free keys are MORE than sufficient!**
+2. **Verify keys are valid:**
+   - Go to https://aistudio.google.com/apikey
+   - Check if keys are still active
+   - Delete and recreate if needed
 
-## RFP Compliance
+3. **Add more keys from different accounts:**
+   - Keys from same account = same quota pool
+   - Use 2-3 different Google accounts
+   - Set GEMINI_API_KEY_2 and GEMINI_API_KEY_3
 
-✅ **RFP Requirement:** "Gemini/Groq AI-powered explanations for 3+ demand scenarios"  
-✅ **Our Implementation:** 3 pre-built AI insights + custom Q&A (goes beyond!)
+4. **Wait for quota reset:**
+   - RPM (requests per minute): Resets every minute
+   - RPD (requests per day): Resets at midnight UTC
 
-✅ **RFP Evidence:** Screenshots will show REAL AI text (not math formulas)
+### Issue: Tab reloads unexpectedly
 
-✅ **Budget:** ₹0 spent (all free tier)
+**Cause:** Streamlit re-renders entire app when state changes or errors occur.
 
-## Advanced Features (Phase 2 - Week 11-16)
+**Solution:** This is normal Streamlit behavior. Just click back to "AI Insights" tab.
 
-Potential enhancements documented in submission Section 9:
+## Quota Calculator
 
-1. **AI-Generated Smart Questions:**
-   - Gemini suggests 3 relevant questions based on forecast data
-   - User clicks to auto-answer
+**Free tier per key:**
+- 15 requests/minute
+- 1,500 requests/day
 
-2. **Conversation History:**
-   - Multi-turn Q&A (follow-up questions)
-   - Context retention
+**With 3 keys:**
+- 45 requests/minute
+- 4,500 requests/day
 
-3. **Export AI Insights:**
-   - Download AI explanations as PDF report
-   - Email to stakeholders
+**Each forecast generates:**
+- 3 pre-built insights = 3 API calls
+- 1 custom question = 1 API call
 
-**These are NOT needed for Week 10!**
+**Example usage:**
+- 10 forecasts/hour = 30 API calls = Fits in free tier easily!
+- 100 forecasts/day = 300 API calls = Well within daily limit!
+
+## Architecture
+
+```
+User clicks "Get AI Answer"
+    ↓
+Streamlit app → ai_insights.py
+    ↓
+_call_gemini_with_fallback()
+    ↓
+Try Key #1 → Rate limit? → Try Key #2 → Rate limit? → Try Key #3 → All failed?
+    ↓                          ↓                          ↓                ↓
+  Success!                  Success!                  Success!        Fallback text
+```
+
+## API Response Times
+
+- **Gemini 2.5 Flash:** 1-3 seconds per call
+- **Pre-built insights:** ~3-9 seconds (3 parallel calls)
+- **Custom Q&A:** 1-3 seconds
+
+## Security
+
+✅ API keys stored in environment variables (never in code)
+✅ Keys are masked in logs (first 8 + last 4 chars shown)
+✅ No user input goes to logs (only prompt templates)
+
+## Cost
+
+**Everything is FREE!** 🎉
+
+- Gemini 2.5 Flash: Free tier (1,500 requests/day per key)
+- Streamlit Cloud: Free hosting
+- GitHub Actions: Free CI/CD
+
+---
+
+**For questions or issues, check:**
+1. Streamlit Cloud logs
+2. Gemini API console: https://aistudio.google.com/apikey
+3. Rate limits: https://ai.google.dev/pricing
