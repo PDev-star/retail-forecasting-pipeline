@@ -1,4 +1,4 @@
-# AI-Powered Insights using Gemini 2.5 Flash
+# AI-Powered Insights using Gemini (Dynamic Model Selection)
 # RFP Requirement: AI explanations for demand scenarios
 
 import os
@@ -8,7 +8,7 @@ from typing import Dict, Any, Optional
 # ============================================================================
 # MULTI-KEY ROTATION FOR QUOTA PROTECTION
 # ============================================================================
-# Free tier: 15 RPM, 1,500 RPD per key
+# Free tier: 15 RPM, 1,500 RPD per key (varies by model)
 # Multiple keys ensure demo works even if one hits quota
 
 GEMINI_API_KEYS = [
@@ -21,14 +21,43 @@ GEMINI_API_KEYS = [
 GEMINI_API_KEYS = [k for k in GEMINI_API_KEYS if k.strip()]
 
 _current_key_index = 0
+_available_model = None  # Cache the working model
 
 # ============================================================================
-# DEBUGGING: Log key availability at startup
+# DEBUGGING: Log key availability and discover models at startup
 # ============================================================================
 print(f"🔑 Gemini API Keys configured: {len(GEMINI_API_KEYS)}")
 for i, key in enumerate(GEMINI_API_KEYS):
     masked = f"{key[:8]}...{key[-4:]}" if len(key) > 12 else "***"
     print(f"  Key #{i+1}: {masked}")
+
+# DISCOVER AVAILABLE MODELS (like notebook does)
+if GEMINI_API_KEYS:
+    print("\n📋 Discovering available Gemini models...")
+    try:
+        genai.configure(api_key=GEMINI_API_KEYS[0])
+        
+        available_models = []
+        for m in genai.list_models():
+            if 'generateContent' in m.supported_generation_methods:
+                available_models.append(m.name)
+                print(f"  ✅ {m.name}")
+        
+        if available_models:
+            # Pick first available model (prefer flash over pro for speed)
+            flash_models = [m for m in available_models if 'flash' in m.lower()]
+            _available_model = flash_models[0] if flash_models else available_models[0]
+            print(f"\n🎯 Selected model: {_available_model}")
+        else:
+            print("  ⚠️ No models found - will try fallback")
+            _available_model = 'gemini-1.5-flash'  # Fallback
+    
+    except Exception as e:
+        print(f"  ⚠️ Could not list models: {e}")
+        print(f"  → Using fallback: gemini-1.5-flash")
+        _available_model = 'gemini-1.5-flash'
+else:
+    print("⚠️ No API keys configured")
 
 
 def _get_next_api_key() -> Optional[str]:
@@ -62,6 +91,10 @@ def _call_gemini_with_fallback(prompt: str, max_retries: int = 3) -> Optional[st
         print("❌ No API keys configured!")
         return None
     
+    if not _available_model:
+        print("❌ No model available!")
+        return None
+    
     attempts = min(max_retries, len(GEMINI_API_KEYS))
     last_error = None
     
@@ -75,11 +108,12 @@ def _call_gemini_with_fallback(prompt: str, max_retries: int = 3) -> Optional[st
         
         try:
             genai.configure(api_key=api_key)
-            model = genai.GenerativeModel('models/gemini-2.5-flash')
+            # Use the model we discovered at startup (like notebook does)
+            model = genai.GenerativeModel(_available_model)
             response = model.generate_content(prompt)
             
             # Success!
-            print(f"✅ Gemini API success (key #{key_index + 1})")
+            print(f"✅ Gemini API success (key #{key_index + 1}, model: {_available_model})")
             return response.text
         
         except Exception as e:
@@ -92,6 +126,10 @@ def _call_gemini_with_fallback(prompt: str, max_retries: int = 3) -> Optional[st
                 print(f"   → Rate limit hit on key #{key_index + 1}")
             elif "api_key" in error_str or "invalid" in error_str or "401" in error_str:
                 print(f"   → Invalid API key #{key_index + 1}")
+            elif "403" in error_str or "denied access" in error_str:
+                print(f"   → Access denied for key #{key_index + 1} (project blocked)")
+            elif "404" in error_str or "not found" in error_str:
+                print(f"   → Model not found - may need to update model name")
             
             # Try next key
             continue
@@ -308,15 +346,18 @@ Keep it plain English, non-technical, business-focused. Under 120 words.
     else:
         return f"""⚠️ **AI Service Temporarily Unavailable**
 
-All {len(GEMINI_API_KEYS)} API keys have hit rate limits.
+All {len(GEMINI_API_KEYS)} API keys have hit rate limits or encountered errors.
 
-**Gemini Free Tier Limits:**
-* 15 requests per minute per key
-* 1,500 requests per day per key
-* You have {len(GEMINI_API_KEYS)} key(s) configured
+**Common Issues:**
+* Rate limits: 15 requests per minute per key (varies by model)
+* Daily limit: 1,500 requests per day per key
+* Blocked project: One key may have 403 error
 
 **Solutions:**
-1. Wait a few minutes and try again
-2. Add more backup keys (GEMINI_API_KEY_2, GEMINI_API_KEY_3)
-3. Upgrade to paid tier for higher quotas
-4. Check that keys are valid at https://aistudio.google.com/apikey"""
+1. Wait a few minutes and try again (rate limits reset)
+2. Generate fresh API keys at: https://aistudio.google.com/apikey
+3. Use DIFFERENT Google accounts for each key (keys from same account share quota)
+
+**Debug Info:**
+* Keys configured: {len(GEMINI_API_KEYS)}
+* Current model: {_available_model or 'Not discovered'}"""
