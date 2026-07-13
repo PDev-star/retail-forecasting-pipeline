@@ -40,22 +40,31 @@ if GEMINI_API_KEYS:
         available_models = []
         for m in genai.list_models():
             if 'generateContent' in m.supported_generation_methods:
+                # Skip deprecated gemini-2.5-* models (404 errors for new users)
+                if 'gemini-2.5' in m.name.lower():
+                    print(f"  ⏭️  {m.name} (skipped - deprecated)")
+                    continue
                 available_models.append(m.name)
                 print(f"  ✅ {m.name}")
         
         if available_models:
-            # Pick first available model (prefer flash over pro for speed)
-            flash_models = [m for m in available_models if 'flash' in m.lower()]
-            _available_model = flash_models[0] if flash_models else available_models[0]
-            print(f"\n🎯 Selected model: {_available_model}")
+            # Prefer gemini-1.5-flash specifically (most stable)
+            if 'models/gemini-1.5-flash' in available_models:
+                _available_model = 'models/gemini-1.5-flash'
+                print(f"\n🎯 Selected model: {_available_model} (preferred stable model)")
+            else:
+                # Otherwise pick first available flash model
+                flash_models = [m for m in available_models if 'flash' in m.lower() and '1.5' in m]
+                _available_model = flash_models[0] if flash_models else available_models[0]
+                print(f"\n🎯 Selected model: {_available_model}")
         else:
             print("  ⚠️ No models found - will try fallback")
-            _available_model = 'gemini-1.5-flash'  # Fallback
+            _available_model = 'models/gemini-1.5-flash'  # Fallback to most stable
     
     except Exception as e:
         print(f"  ⚠️ Could not list models: {e}")
-        print(f"  → Using fallback: gemini-1.5-flash")
-        _available_model = 'gemini-1.5-flash'
+        print(f"  → Using fallback: models/gemini-1.5-flash")
+        _available_model = 'models/gemini-1.5-flash'
 else:
     print("⚠️ No API keys configured")
 
