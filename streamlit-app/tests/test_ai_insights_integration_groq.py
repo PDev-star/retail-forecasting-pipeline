@@ -1,5 +1,5 @@
-# Integration tests for AI Insights UI component
-# Tests the render_insights_tab() function with mocked AI responses
+# Integration tests for AI Insights UI component (Groq version)
+# Tests the render_insights_tab() function with mocked Groq AI responses
 
 import pytest
 import sys
@@ -65,13 +65,13 @@ from services.inventory import calculate_stock_recommendation
 
 
 def test_render_insights_tab_loads_without_crash():
-    """Test that AI insights tab renders without crashing."""
+    """Test that AI insights tab renders without crashing (Groq)."""
     forecast = [100, 110, 120, 115, 105]
     product = {'name': 'Test Widget', 'sku': 'WDG123', 'product_id': 'p1'}
     scenario_desc = 'Normal conditions'
     lead_time_days = 7
     
-    # Mock AI functions to return test responses (patch Groq module)
+    # Mock Groq AI functions to return test responses
     with patch('utils.ai_insights_groq.get_forecast_insight', return_value="Test forecast insight"):
         with patch('utils.ai_insights_groq.get_stock_insight', return_value="Test stock insight"):
             with patch('utils.ai_insights_groq.get_risk_insight', return_value="Test risk insight"):
@@ -83,7 +83,7 @@ def test_render_insights_tab_loads_without_crash():
 
 
 def test_render_insights_tab_shows_three_expanders():
-    """Test that all 3 AI insight expanders are rendered."""
+    """Test that all 3 AI insight expanders are rendered (Groq)."""
     forecast = [100, 110, 120]
     product = {'name': 'Test', 'sku': 'T1', 'product_id': 'p1'}
     scenario_desc = 'Test'
@@ -109,7 +109,7 @@ def test_render_insights_tab_shows_three_expanders():
 
 
 def test_render_insights_tab_shows_custom_qna():
-    """Test that custom Q&A section is rendered."""
+    """Test that custom Q&A section is rendered (Groq)."""
     forecast = [100, 110, 120]
     product = {'name': 'Test', 'sku': 'T1', 'product_id': 'p1'}
     scenario_desc = 'Test'
@@ -133,7 +133,7 @@ def test_render_insights_tab_shows_custom_qna():
 
 
 def test_render_insights_tab_with_fallback_ai():
-    """Test that tab works when AI returns fallback text."""
+    """Test that tab works when Groq AI returns fallback text."""
     forecast = [100, 110, 120]
     product = {'name': 'Test', 'sku': 'T1', 'product_id': 'p1'}
     scenario_desc = 'Test'
@@ -151,7 +151,7 @@ def test_render_insights_tab_with_fallback_ai():
 
 
 def test_render_insights_tab_with_empty_forecast():
-    """Test that tab handles empty forecast gracefully."""
+    """Test that tab handles empty forecast gracefully (Groq)."""
     forecast = []
     product = {'name': 'Test', 'sku': 'T1', 'product_id': 'p1'}
     scenario_desc = 'Test'
@@ -172,7 +172,7 @@ def test_render_insights_tab_with_empty_forecast():
 
 
 def test_render_insights_tab_calls_ai_functions():
-    """Test that all AI insight functions are actually called."""
+    """Test that all Groq AI insight functions are actually called."""
     forecast = [100, 110, 120]
     product = {'name': 'Test', 'sku': 'T1', 'product_id': 'p1'}
     scenario_desc = 'Test'
@@ -194,7 +194,7 @@ def test_render_insights_tab_calls_ai_functions():
 
 
 def test_render_insights_tab_passes_correct_data():
-    """Test that correct data is passed to AI functions."""
+    """Test that correct data is passed to Groq AI functions."""
     forecast = [100, 110, 120]
     product = {'name': 'Widget', 'sku': 'WDG123', 'product_id': 'p1'}
     scenario_desc = 'Promotion'
@@ -227,7 +227,7 @@ def test_render_insights_tab_passes_correct_data():
 
 
 def test_render_insights_tab_custom_qna_button_not_clicked():
-    """Test custom Q&A doesn't execute when button not clicked."""
+    """Test custom Q&A doesn't execute when button not clicked (Groq)."""
     forecast = [100, 110, 120]
     product = {'name': 'Test', 'sku': 'T1', 'product_id': 'p1'}
     scenario_desc = 'Test'
