@@ -22,6 +22,14 @@ GEMINI_API_KEYS = [k for k in GEMINI_API_KEYS if k.strip()]
 
 _current_key_index = 0
 
+# ============================================================================
+# DEBUGGING: Log key availability at startup
+# ============================================================================
+print(f"🔑 Gemini API Keys configured: {len(GEMINI_API_KEYS)}")
+for i, key in enumerate(GEMINI_API_KEYS):
+    masked = f"{key[:8]}...{key[-4:]}" if len(key) > 12 else "***"
+    print(f"  Key #{i+1}: {masked}")
+
 
 def _get_next_api_key() -> Optional[str]:
     """Get next available API key (rotates through keys on failure)"""
@@ -51,11 +59,15 @@ def _call_gemini_with_fallback(prompt: str, max_retries: int = 3) -> Optional[st
         AI response text, or None if all keys fail
     """
     if not GEMINI_API_KEYS:
+        print("❌ No API keys configured!")
         return None
     
     attempts = min(max_retries, len(GEMINI_API_KEYS))
+    last_error = None
     
     for attempt in range(attempts):
+        # Store index BEFORE getting key (for accurate logging)
+        key_index = _current_key_index
         api_key = _get_next_api_key()
         
         if not api_key:
@@ -63,19 +75,30 @@ def _call_gemini_with_fallback(prompt: str, max_retries: int = 3) -> Optional[st
         
         try:
             genai.configure(api_key=api_key)
-            model = genai.GenerativeModel('gemini-2.5-flash-latest')
+            model = genai.GenerativeModel('models/gemini-2.5-flash')
             response = model.generate_content(prompt)
             
             # Success!
-            print(f"✅ Gemini API success (key #{_current_key_index})")
+            print(f"✅ Gemini API success (key #{key_index + 1})")
             return response.text
         
         except Exception as e:
-            print(f"⚠️ Gemini API failed with key #{_current_key_index}: {e}")
+            last_error = str(e)
+            print(f"⚠️ Gemini API failed with key #{key_index + 1}: {e}")
+            
+            # Check if it's a rate limit error
+            error_str = str(e).lower()
+            if "quota" in error_str or "rate limit" in error_str or "429" in error_str:
+                print(f"   → Rate limit hit on key #{key_index + 1}")
+            elif "api_key" in error_str or "invalid" in error_str or "401" in error_str:
+                print(f"   → Invalid API key #{key_index + 1}")
+            
             # Try next key
             continue
     
-    # All keys failed
+    # All keys failed - log details
+    print(f"❌ All {len(GEMINI_API_KEYS)} API keys exhausted")
+    print(f"   Last error: {last_error}")
     return None
 
 
@@ -237,7 +260,14 @@ def get_custom_ai_answer(question: str, context: Dict[str, Any]) -> str:
         AI-generated answer (plain English)
     """
     if not GEMINI_API_KEYS:
-        return "⚠️ AI service unavailable. Please configure GEMINI_API_KEY environment variables."
+        return """⚠️ **AI Service Unavailable**
+        
+No API keys configured. Please add GEMINI_API_KEY to environment variables.
+
+**For Streamlit Cloud:**
+1. Go to app settings → Secrets
+2. Add: `GEMINI_API_KEY = "your-key-here"`
+3. Optionally add GEMINI_API_KEY_2 and GEMINI_API_KEY_3 for backup"""
     
     forecast = context.get('forecast', [])
     product = context.get('product', {})
@@ -276,4 +306,17 @@ Keep it plain English, non-technical, business-focused. Under 120 words.
     if response:
         return response
     else:
-        return "⚠️ AI service temporarily unavailable (all API keys exhausted). Please try again in a few minutes, or contact support if this persists."
+        return f"""⚠️ **AI Service Temporarily Unavailable**
+
+All {len(GEMINI_API_KEYS)} API keys have hit rate limits.
+
+**Gemini Free Tier Limits:**
+* 15 requests per minute per key
+* 1,500 requests per day per key
+* You have {len(GEMINI_API_KEYS)} key(s) configured
+
+**Solutions:**
+1. Wait a few minutes and try again
+2. Add more backup keys (GEMINI_API_KEY_2, GEMINI_API_KEY_3)
+3. Upgrade to paid tier for higher quotas
+4. Check that keys are valid at https://aistudio.google.com/apikey"""
