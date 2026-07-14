@@ -12,6 +12,8 @@ except ImportError:
         @staticmethod
         def markdown(text): pass
         @staticmethod
+        def caption(text): pass
+        @staticmethod
         def selectbox(*args, **kwargs):
             # Return first option if options provided
             if 'options' in kwargs:
@@ -39,22 +41,25 @@ def render_sidebar(PRODUCTS):
     st.sidebar.title("📊 Retail Forecasting Engine")
     st.sidebar.markdown("---")
     
-    # Create display name -> product_id mapping
+    # Create clean display name -> product_id mapping (product name only)
     product_display_map = {
-        f"{product_id}: {PRODUCTS[product_id]['name']}": product_id
+        PRODUCTS[product_id]['name']: product_id
         for product_id in PRODUCTS.keys()
     }
     
-    # Show friendly names in UI, get back the product_id
-    selected_display_name = st.sidebar.selectbox(
-        "Select Product Category",
+    # Show only product name in dropdown
+    selected_product_name = st.sidebar.selectbox(
+        "Select Product",
         options=list(product_display_map.keys()),
         key="product_category",
     )
     
     # Map back to product_id
-    selected_category = product_display_map[selected_display_name]
+    selected_category = product_display_map[selected_product_name]
     product = PRODUCTS[selected_category]
+    
+    # Display SKU as caption below selectbox
+    st.sidebar.caption(f"SKU: {product['sku']} • Category: {selected_category}")
     
     # Forecast Horizon
     st.sidebar.markdown("### Forecast Parameters")
