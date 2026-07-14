@@ -87,7 +87,13 @@ from components.tabs import (
 # ============================================================================
 
 if _should_run_ui():
-    """Main app function."""
+    # Start keep-alive thread (MOVED INSIDE UI guard to prevent test issues)
+    if FASTAPI_URL != "http://localhost:8000":
+        if "keep_alive_started" not in st.session_state:
+            st.session_state.keep_alive_started = True
+            ping_thread = threading.Thread(target=keep_fastapi_warm, daemon=True)
+            ping_thread.start()
+            print(f"🚀 Keep-alive thread started for {FASTAPI_URL}")
     # Custom CSS for smooth tab transitions
     st.markdown("""
         <style>
@@ -131,31 +137,37 @@ if _should_run_ui():
         </style>
     """, unsafe_allow_html=True)
     
-    st.title("🏪 Retail Demand Forecasting Dashboard")
-    st.markdown("Predict future demand and optimize inventory management")
+    # Initialize active tab in session state
+    if "active_tab" not in st.session_state:
+        st.session_state.active_tab = "📊 Forecast Chart"
     
-    # Sidebar configuration
-    config = render_sidebar(PRODUCTS)
-    selected_category = config["selected_category"]
-    product = config["product"]
-    horizon = config["horizon"]
-    scenario_type = config["scenario_type"]
-    adjustment_factor = config["adjustment_factor"]
-    scenario_desc = config["scenario_desc"]
-    lead_time_days = config["lead_time_days"]
+    # Render sidebar and get parameters
+    sidebar_state = render_sidebar(PRODUCTS)
     
-    # Generate forecast button
-    if st.button("🚀 Generate Forecast", type="primary", use_container_width=True):
-        with st.spinner("🔮 Generating forecast..."):
-            result = get_forecast(selected_category, horizon)
+    product = sidebar_state["product"]
+    horizon = sidebar_state["horizon"]
+    adjustment_factor = sidebar_state["adjustment_factor"]
+    scenario_desc = sidebar_state["scenario_desc"]
+    lead_time_days = sidebar_state["lead_time_days"]
+    selected_category = sidebar_state["selected_category"]
+    scenario_type = sidebar_state["scenario_type"]
+    
+    # Main content area
+    st.title(f"📈 {product['name']}")
+    st.markdown(f"**SKU:** {product['sku']} | **Category:** {selected_category}")
+    st.markdown("---")
+    
+    # Fetch forecast button
+    if st.button("🔮 Generate Forecast", type="primary", use_container_width=True):
+        with st.spinner(f"Fetching {horizon}-day forecast via FastAPI Gateway..."):
+            forecast = get_forecast(product["product_id"], horizon)
             
-            if result and result.get("success"):
-                # Extract and adjust forecast
-                raw_forecast = result["forecast"]["values"]
-                forecast = [v * adjustment_factor for v in raw_forecast]
+            if forecast:
+                # Apply scenario adjustment
+                adjusted_forecast = [val * adjustment_factor for val in forecast]
                 
                 # Store in session state
-                st.session_state["forecast"] = forecast
+                st.session_state["forecast"] = adjusted_forecast
                 st.session_state["scenario"] = scenario_desc
                 st.session_state["horizon"] = horizon
                 st.session_state["product"] = product
@@ -225,15 +237,3 @@ if _should_run_ui():
     else:
         # Show welcome screen
         render_welcome_screen()
-
-if __name__ == "__main__" and _should_run_ui():
-    # Start keep-alive thread for API warmth (only in non-test environments)
-    if not is_apptest:
-        keep_alive_thread = threading.Thread(
-            target=keep_fastapi_warm,
-            args=(FASTAPI_URL,),
-            daemon=True
-        )
-        keep_alive_thread.start()
-    
-    main()
