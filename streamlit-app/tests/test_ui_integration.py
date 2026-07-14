@@ -242,7 +242,123 @@ def test_seasonal_peak_scenario():
 
 
 # ============================================================================
-# TEST 11: Different Horizon Values
+# TEST 11: Black Friday Sale Scenario
+# ============================================================================
+def test_black_friday_scenario():
+    """Test: Black Friday Sale (+80%) scenario multiplies forecast by 1.8"""
+    at = AppTest.from_file("../app.py")
+    at.run()
+    
+    # Select Black Friday scenario
+    at.selectbox[1].select("Black Friday Sale (+80%)").run()
+    
+    with patch('services.api_client.requests.post') as mock_post:
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "success": True,
+            "product": {"id": "Cat1", "name": "Test Product"},
+            "forecast": {"horizon_days": 7, "values": [10.0] * 7},
+            "generated_at": "2026-07-03T10:00:00Z"
+        }
+        mock_post.return_value = mock_response
+        
+        at.button[0].click().run()
+        
+        # Forecast adjusted (10.0 * 1.8 = 18.0)
+        if "forecast" in at.session_state:
+            assert at.session_state["forecast"][0] == 18.0
+
+
+# ============================================================================
+# TEST 12: Competitor Entry Scenario
+# ============================================================================
+def test_competitor_entry_scenario():
+    """Test: Competitor Entry (-20%) scenario multiplies forecast by 0.8"""
+    at = AppTest.from_file("../app.py")
+    at.run()
+    
+    # Select Competitor Entry scenario
+    at.selectbox[1].select("Competitor Entry (-20%)").run()
+    
+    with patch('services.api_client.requests.post') as mock_post:
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "success": True,
+            "product": {"id": "Cat1", "name": "Test Product"},
+            "forecast": {"horizon_days": 7, "values": [10.0] * 7},
+            "generated_at": "2026-07-03T10:00:00Z"
+        }
+        mock_post.return_value = mock_response
+        
+        at.button[0].click().run()
+        
+        # Forecast adjusted (10.0 * 0.8 = 8.0)
+        if "forecast" in at.session_state:
+            assert at.session_state["forecast"][0] == 8.0
+
+
+# ============================================================================
+# TEST 13: Holiday Season Scenario
+# ============================================================================
+def test_holiday_season_scenario():
+    """Test: Holiday Season (+70%) scenario multiplies forecast by 1.7"""
+    at = AppTest.from_file("../app.py")
+    at.run()
+    
+    # Select Holiday Season scenario
+    at.selectbox[1].select("Holiday Season (+70%)").run()
+    
+    with patch('services.api_client.requests.post') as mock_post:
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "success": True,
+            "product": {"id": "Cat1", "name": "Test Product"},
+            "forecast": {"horizon_days": 7, "values": [10.0] * 7},
+            "generated_at": "2026-07-03T10:00:00Z"
+        }
+        mock_post.return_value = mock_response
+        
+        at.button[0].click().run()
+        
+        # Forecast adjusted (10.0 * 1.7 = 17.0)
+        if "forecast" in at.session_state:
+            assert at.session_state["forecast"][0] == 17.0
+
+
+# ============================================================================
+# TEST 14: Product Launch Scenario
+# ============================================================================
+def test_product_launch_scenario():
+    """Test: Product Launch (+60%) scenario multiplies forecast by 1.6"""
+    at = AppTest.from_file("../app.py")
+    at.run()
+    
+    # Select Product Launch scenario
+    at.selectbox[1].select("Product Launch (+60%)").run()
+    
+    with patch('services.api_client.requests.post') as mock_post:
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "success": True,
+            "product": {"id": "Cat1", "name": "Test Product"},
+            "forecast": {"horizon_days": 7, "values": [10.0] * 7},
+            "generated_at": "2026-07-03T10:00:00Z"
+        }
+        mock_post.return_value = mock_response
+        
+        at.button[0].click().run()
+        
+        # Forecast adjusted (10.0 * 1.6 = 16.0)
+        if "forecast" in at.session_state:
+            assert at.session_state["forecast"][0] == 16.0
+
+
+# ============================================================================
+# TEST 15: Different Horizon Values
 # ============================================================================
 def test_different_horizon_values():
     """Test: Changing horizon slider works correctly"""
@@ -271,7 +387,7 @@ def test_different_horizon_values():
 
 
 # ============================================================================
-# TEST 12: Multiple Forecast Generations
+# TEST 16: Multiple Forecast Generations
 # ============================================================================
 def test_multiple_forecast_generations_update_state():
     """Test: Generating multiple forecasts updates session state correctly"""
@@ -309,7 +425,7 @@ def test_multiple_forecast_generations_update_state():
 
 
 # ============================================================================
-# TEST 13: Malformed API Response
+# TEST 17: Malformed API Response
 # ============================================================================
 def test_malformed_api_response_handled_gracefully():
     """Test: API returns malformed JSON, app doesn't crash"""
@@ -333,7 +449,7 @@ def test_malformed_api_response_handled_gracefully():
 
 
 # ============================================================================
-# TEST 14: JSON Decode Error
+# TEST 18: JSON Decode Error
 # ============================================================================
 def test_json_decode_error_handled():
     """Test: API returns invalid JSON, app handles it"""
@@ -353,7 +469,7 @@ def test_json_decode_error_handled():
 
 
 # ============================================================================
-# TEST 15: API Timeout
+# TEST 19: API Timeout
 # ============================================================================
 def test_api_timeout_handled():
     """Test: API request times out, app handles it"""
@@ -371,7 +487,7 @@ def test_api_timeout_handled():
 
 
 # ============================================================================
-# TEST 16: Long Forecast (90 days)
+# TEST 20: Long Forecast (90 days)
 # ============================================================================
 def test_long_forecast_90_days():
     """Test: 90-day forecast works correctly"""

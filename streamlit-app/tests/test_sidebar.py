@@ -33,7 +33,7 @@ def test_render_sidebar_returns_correct_structure():
             "WHITE HANGING HEART T-LIGHT HOLDER",  # Product selection
             "Normal"  # Scenario type
         ])
-        mock_st.sidebar.slider = MagicMock(return_value=30)
+        mock_st.sidebar.slider = MagicMock(return_value=30)  # Horizon (now last)
         
         result = render_sidebar(MOCK_PRODUCTS)
         
@@ -57,7 +57,7 @@ def test_render_sidebar_normal_scenario():
             "WHITE HANGING HEART T-LIGHT HOLDER",
             "Normal"
         ])
-        mock_st.sidebar.slider = MagicMock(return_value=30)
+        mock_st.sidebar.slider = MagicMock(return_value=30)  # Horizon only
         
         result = render_sidebar(MOCK_PRODUCTS)
         
@@ -77,7 +77,7 @@ def test_render_sidebar_promotion_scenario():
             "JUMBO BAG RED RETROSPOT",
             "Promotion (+30%)"
         ])
-        mock_st.sidebar.slider = MagicMock(return_value=30)
+        mock_st.sidebar.slider = MagicMock(return_value=30)  # Horizon only
         
         result = render_sidebar(MOCK_PRODUCTS)
         
@@ -97,7 +97,8 @@ def test_render_sidebar_supply_disruption_scenario():
             "WHITE HANGING HEART T-LIGHT HOLDER",
             "Supply Disruption"
         ])
-        mock_st.sidebar.slider = MagicMock(side_effect=[30, 21])  # horizon, then lead_time
+        # NEW ORDER: lead_time (inside scenario logic) THEN horizon (at bottom)
+        mock_st.sidebar.slider = MagicMock(side_effect=[21, 30])
         
         result = render_sidebar(MOCK_PRODUCTS)
         
@@ -117,7 +118,7 @@ def test_render_sidebar_seasonal_peak_scenario():
             "JUMBO BAG RED RETROSPOT",
             "Seasonal Peak (+50%)"
         ])
-        mock_st.sidebar.slider = MagicMock(return_value=30)
+        mock_st.sidebar.slider = MagicMock(return_value=30)  # Horizon only
         
         result = render_sidebar(MOCK_PRODUCTS)
         
@@ -137,7 +138,7 @@ def test_render_sidebar_black_friday_scenario():
             "WHITE HANGING HEART T-LIGHT HOLDER",
             "Black Friday Sale (+80%)"
         ])
-        mock_st.sidebar.slider = MagicMock(return_value=30)
+        mock_st.sidebar.slider = MagicMock(return_value=30)  # Horizon only
         
         result = render_sidebar(MOCK_PRODUCTS)
         
@@ -157,7 +158,7 @@ def test_render_sidebar_clearance_scenario():
             "JUMBO BAG RED RETROSPOT",
             "End of Season Clearance (+40%)"
         ])
-        mock_st.sidebar.slider = MagicMock(return_value=30)
+        mock_st.sidebar.slider = MagicMock(return_value=30)  # Horizon only
         
         result = render_sidebar(MOCK_PRODUCTS)
         
@@ -177,7 +178,7 @@ def test_render_sidebar_product_launch_scenario():
             "WHITE HANGING HEART T-LIGHT HOLDER",
             "Product Launch (+60%)"
         ])
-        mock_st.sidebar.slider = MagicMock(return_value=30)
+        mock_st.sidebar.slider = MagicMock(return_value=30)  # Horizon only
         
         result = render_sidebar(MOCK_PRODUCTS)
         
@@ -197,7 +198,7 @@ def test_render_sidebar_competitor_entry_scenario():
             "JUMBO BAG RED RETROSPOT",
             "Competitor Entry (-20%)"
         ])
-        mock_st.sidebar.slider = MagicMock(return_value=30)
+        mock_st.sidebar.slider = MagicMock(return_value=30)  # Horizon only
         
         result = render_sidebar(MOCK_PRODUCTS)
         
@@ -217,7 +218,7 @@ def test_render_sidebar_economic_downturn_scenario():
             "WHITE HANGING HEART T-LIGHT HOLDER",
             "Economic Downturn (-30%)"
         ])
-        mock_st.sidebar.slider = MagicMock(return_value=30)
+        mock_st.sidebar.slider = MagicMock(return_value=30)  # Horizon only
         
         result = render_sidebar(MOCK_PRODUCTS)
         
@@ -237,7 +238,7 @@ def test_render_sidebar_holiday_season_scenario():
             "JUMBO BAG RED RETROSPOT",
             "Holiday Season (+70%)"
         ])
-        mock_st.sidebar.slider = MagicMock(return_value=30)
+        mock_st.sidebar.slider = MagicMock(return_value=30)  # Horizon only
         
         result = render_sidebar(MOCK_PRODUCTS)
         
@@ -347,13 +348,13 @@ def test_render_sidebar_all_scenarios_have_parameters():
             mock_st.sidebar.markdown = MagicMock()
             mock_st.sidebar.caption = MagicMock()
             
-            # Supply Disruption has an extra slider call
+            # Supply Disruption has an extra slider call (lead_time THEN horizon)
             if scenario == "Supply Disruption":
                 mock_st.sidebar.selectbox = MagicMock(side_effect=[
                     "WHITE HANGING HEART T-LIGHT HOLDER",
                     scenario
                 ])
-                mock_st.sidebar.slider = MagicMock(side_effect=[30, 21])
+                mock_st.sidebar.slider = MagicMock(side_effect=[21, 30])  # NEW ORDER!
             else:
                 mock_st.sidebar.selectbox = MagicMock(side_effect=[
                     "WHITE HANGING HEART T-LIGHT HOLDER",

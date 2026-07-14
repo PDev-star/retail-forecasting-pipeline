@@ -95,6 +95,10 @@ if _should_run_ui():
             ping_thread.start()
             print(f"🚀 Keep-alive thread started for {FASTAPI_URL}")
     
+    # Initialize active tab in session state
+    if "active_tab" not in st.session_state:
+        st.session_state.active_tab = "📊 Forecast Chart"
+    
     # Render sidebar and get parameters
     sidebar_state = render_sidebar(PRODUCTS)
     
@@ -137,24 +141,36 @@ if _should_run_ui():
         product = st.session_state["product"]
         lead_time_days = st.session_state["lead_time_days"]
     
-        # Create tabs (no key parameter - not supported in older Streamlit versions)
-        tab1, tab2, tab3, tab4 = st.tabs([
-            "📊 Forecast Chart",
-            "📋 Data Table",
-            "🎯 Stock Recommendations",
-            "💡 AI Insights",
-        ])
-    
-        with tab1:
+        # Tab navigation using radio (workaround for tab state persistence)
+        st.session_state.active_tab = st.radio(
+            "Navigation",
+            ["📊 Forecast Chart", "📋 Data Table", "🎯 Stock Recommendations", "💡 AI Insights"],
+            index=["📊 Forecast Chart", "📋 Data Table", "🎯 Stock Recommendations", "💡 AI Insights"].index(st.session_state.active_tab),
+            horizontal=True,
+            label_visibility="collapsed"
+        )
+        
+        st.markdown("---")
+        
+        # Render selected tab
+        if st.session_state.active_tab == "📊 Forecast Chart":
             df_forecast = render_forecast_tab(forecast, horizon, product, scenario_desc)
-    
-        with tab2:
+        
+        elif st.session_state.active_tab == "📋 Data Table":
+            # Generate df_forecast if not already available
+            import pandas as pd
+            from datetime import datetime, timedelta
+            dates = [(datetime.now() + timedelta(days=i)).strftime("%Y-%m-%d") for i in range(1, horizon + 1)]
+            df_forecast = pd.DataFrame({
+                "Date": dates,
+                "Predicted Demand": forecast
+            })
             render_data_tab(df_forecast, product)
-    
-        with tab3:
+        
+        elif st.session_state.active_tab == "🎯 Stock Recommendations":
             render_stock_tab(forecast, lead_time_days, calculate_stock_recommendation)
-    
-        with tab4:
+        
+        elif st.session_state.active_tab == "💡 AI Insights":
             render_insights_tab(forecast, product, scenario_desc, lead_time_days, calculate_stock_recommendation)
     
     else:
