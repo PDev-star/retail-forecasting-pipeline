@@ -69,26 +69,23 @@ def render_sidebar(PRODUCTS):
     st.sidebar.markdown("---")
     st.sidebar.markdown("### What-If Scenarios")
     
-    # Extended scenario options - users can scroll through more options
-    scenario_options = [
-        "Normal",
-        "Promotion (+30%)",
-        "Supply Disruption",
-        "Seasonal Peak (+50%)",
-        "Black Friday Sale (+80%)",
-        "End of Season Clearance (+40%)",
-        "Product Launch (+60%)",
-        "Competitor Entry (-20%)",
-        "Economic Downturn (-30%)",
-        "Holiday Season (+70%)"
-    ]
-    
     scenario_type = st.sidebar.selectbox(
         "Scenario Type",
-        scenario_options,
+        [
+            "Normal",
+            "Promotion (+30%)",
+            "Supply Disruption",
+            "Seasonal Peak (+50%)",
+            "Black Friday Sale (+80%)",
+            "End of Season Clearance (+40%)",
+            "Product Launch (+60%)",
+            "Competitor Entry (-20%)",
+            "Economic Downturn (-30%)",
+            "Holiday Season (+70%)",
+        ],
     )
     
-    # Map scenarios to parameters
+    # Scenario logic with all 10 scenarios
     if scenario_type == "Promotion (+30%)":
         adjustment_factor = 1.3
         scenario_desc = "30% demand increase due to promotional campaign"
@@ -125,7 +122,7 @@ def render_sidebar(PRODUCTS):
         adjustment_factor = 1.7
         scenario_desc = "70% demand increase during holiday season"
         lead_time_days = 10
-    else:
+    else:  # Normal
         adjustment_factor = 1.0
         scenario_desc = "Standard business-as-usual forecast"
         lead_time_days = 14
