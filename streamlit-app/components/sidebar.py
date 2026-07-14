@@ -39,34 +39,41 @@ def render_sidebar(PRODUCTS):
     st.sidebar.title("📊 Retail Forecasting Engine")
     st.sidebar.markdown("---")
     
-    # Create display name -> product_id mapping
+    # Create cleaner display names (just show the product name, not the ID)
     product_display_map = {
-        f"{product_id}: {PRODUCTS[product_id]['name']}": product_id
+        PRODUCTS[product_id]['name']: product_id
         for product_id in PRODUCTS.keys()
     }
     
     # Show friendly names in UI, get back the product_id
+    st.sidebar.markdown("**Select Product Category**")
     selected_display_name = st.sidebar.selectbox(
         "Select Product Category",
         options=list(product_display_map.keys()),
         key="product_category",
+        label_visibility="collapsed"  # Hide the redundant label
     )
     
     # Map back to product_id
     selected_category = product_display_map[selected_display_name]
     product = PRODUCTS[selected_category]
     
+    # Show the SKU below the selectbox for reference
+    st.sidebar.caption(f"SKU: **{selected_category}** | {product['sku']}")
+    
     # Forecast Horizon
-    st.sidebar.markdown("### Forecast Parameters")
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("**Forecast Parameters**")
     horizon = st.sidebar.slider("Forecast Horizon (days)", min_value=7, max_value=90, value=30, step=7)
     
     # What-If Scenarios
     st.sidebar.markdown("---")
-    st.sidebar.markdown("### What-If Scenarios")
+    st.sidebar.markdown("**What-If Scenarios**")
     
     scenario_type = st.sidebar.selectbox(
         "Scenario Type",
         ["Normal", "Promotion (+30%)", "Supply Disruption", "Seasonal Peak (+50%)"],
+        key="scenario_type_selector"
     )
     
     if scenario_type == "Promotion (+30%)":

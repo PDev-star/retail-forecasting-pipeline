@@ -186,23 +186,31 @@ def get_forecast_insight(data: Dict[str, Any]) -> str:
     max_demand = max(forecast)
     min_demand = min(forecast)
     
-    prompt = f"""
-You are a retail inventory analyst. Explain this demand forecast in plain English for a procurement manager:
+    # Calculate percentage change for more specific insights
+    pct_change = ((forecast[-1] - forecast[0]) / forecast[0] * 100) if forecast[0] != 0 else 0
+    
+    prompt = f"""You are a retail inventory expert analyzing demand for {product['name']}.
 
-Product: {product['name']} (SKU: {product['sku']})
-Forecast period: {len(forecast)} days
-Average daily demand: {avg_demand:.1f} units
-Demand range: {min_demand:.1f} to {max_demand:.1f} units
-Trend: {trend}
-Scenario: {scenario}
+**DATA:**
+- Next {len(forecast)} days forecast: avg {avg_demand:.0f} units/day, ranging {min_demand:.0f}-{max_demand:.0f}
+- Trend: {trend} ({pct_change:+.1f}% change)
+- Context: {scenario}
 
-Provide a 3-sentence summary:
-1. What's the demand pattern?
-2. Business implication (revenue/cost impact)?
-3. One actionable recommendation?
+**YOUR JOB:** Write a 3-sentence analysis that a procurement manager can ACT on immediately.
 
-Keep it under 100 words, plain English, business-focused.
-"""
+**RULES:**
+- Sentence 1: Describe the demand pattern WITH SPECIFIC NUMBERS (don't just say "demand is decreasing")
+- Sentence 2: Explain the business impact (revenue risk, inventory cost, or cash flow)
+- Sentence 3: Give ONE specific action with a number (e.g., "reduce orders to 200 units" not "consider reducing")
+
+**AVOID GENERIC PHRASES:**
+❌ "may impact revenue"
+❌ "consider adjusting"
+❌ "plan inventory levels accordingly"
+
+✅ Instead say: "Reduce next order to 150 units" or "Increase safety stock by 30%"
+
+Keep under 80 words. Be direct and specific."""
     
     response = _call_gemini_with_fallback(prompt)
     
@@ -228,21 +236,34 @@ def get_stock_insight(data: Dict[str, Any]) -> str:
     safety_stock = data['safety_stock']
     lead_time_days = data['lead_time_days']
     
-    prompt = f"""
-You are a retail inventory analyst. Explain this stock recommendation in plain English:
+    # Calculate useful ratios
+    coverage_days = recommended_stock / (reorder_point / lead_time_days) if reorder_point > 0 else 0
+    safety_pct = (safety_stock / recommended_stock * 100) if recommended_stock > 0 else 0
+    
+    prompt = f"""You are a retail inventory expert. Explain this stock recommendation to a buyer who needs to make a purchase decision TODAY.
 
-Recommended order quantity: {recommended_stock} units
-Reorder point: {reorder_point} units (trigger reorder when stock falls to this level)
-Safety stock buffer: {safety_stock} units
-Supplier lead time: {lead_time_days} days
+**THE NUMBERS:**
+- Order quantity: {recommended_stock} units
+- Reorder trigger: {reorder_point} units (when stock falls below this)
+- Safety buffer: {safety_stock} units ({safety_pct:.0f}% of order)
+- Lead time: {lead_time_days} days
 
-In 2-3 sentences, explain:
-1. Why this order quantity makes sense?
-2. What's the risk level (low/medium/high)?
-3. One action the buyer should take?
+**YOUR JOB:** Write 2-3 sentences that help the buyer understand if this is the RIGHT amount to order.
 
-Keep it under 80 words, non-technical language.
-"""
+**STRUCTURE:**
+1. Explain why this order size makes sense (mention coverage or runway)
+2. State the risk level (LOW/MEDIUM/HIGH) with a reason
+3. Tell them the ONE thing to watch or do next
+
+**EXAMPLES OF GOOD INSIGHTS:**
+✅ "This order covers {coverage_days:.0f} days of demand. Risk is LOW because..."
+✅ "With {lead_time_days} days lead time, you'll need to reorder when you have..."
+
+**AVOID:**
+❌ "This order quantity balances stock needs"
+❌ "The buyer should reorder when stock falls"
+
+Be specific with numbers. Under 70 words."""
     
     response = _call_gemini_with_fallback(prompt)
     
@@ -271,23 +292,31 @@ def get_risk_insight(data: Dict[str, Any]) -> str:
     volatility_ratio = (volatility / avg_demand * 100) if avg_demand > 0 else 0
     risk_level = "HIGH" if volatility_ratio > 50 else "MEDIUM" if volatility_ratio > 25 else "LOW"
     
-    prompt = f"""
-You are a retail risk analyst. Assess this forecast risk:
+    prompt = f"""You are a retail supply chain risk expert. A procurement manager needs to understand the RISK in this forecast.
 
-Demand volatility: {volatility:.1f} units (difference between peak and minimum)
-Average daily demand: {avg_demand:.1f} units
-Volatility ratio: {volatility_ratio:.1f}%
-Demand trend: {trend}
-Scenario: {scenario}
-Risk level: {risk_level}
+**THE SITUATION:**
+- Demand swings: {min(volatility, 999):.0f} units between peak and low ({volatility_ratio:.0f}% volatility)
+- Average: {avg_demand:.0f} units/day
+- Trend: {trend}
+- Context: {scenario}
+- Risk level: {risk_level}
 
-In 2-3 sentences:
-1. What's the risk level and why?
-2. What could go wrong?
-3. One mitigation action?
+**YOUR JOB:** Write 2-3 sentences that help them avoid stockouts OR overstocking.
 
-Keep it under 80 words, focus on business risk.
-"""
+**STRUCTURE:**
+1. State the risk level and WHY it's that level (be specific about what creates the risk)
+2. What COULD GO WRONG (stockout? excess inventory? cash tied up?)
+3. ONE concrete mitigation action (with a number if possible)
+
+**EXAMPLES:**
+✅ "Risk level is HIGH due to {volatility_ratio:.0f}% swings. Overstocking could tie up $XX in inventory..."
+✅ "Risk is MEDIUM. The {trend} trend means you might face stockouts by day X..."
+
+**AVOID:**
+❌ "Demand volatility adds uncertainty"
+❌ "Consider implementing flexible inventory management"
+
+Be direct about what could go wrong. Under 70 words."""
     
     response = _call_gemini_with_fallback(prompt)
     
@@ -346,28 +375,32 @@ No API keys configured. Please add GEMINI_API_KEY to environment variables.
         trend = "stable"
     
     # META-PROMPT: Let Gemini understand the question and frame its own answer
-    meta_prompt = f"""
-You are a retail inventory analyst AI assistant. A business user asked this question:
+    meta_prompt = f"""You are a retail inventory analyst AI assistant. A buyer asked:
 
 "{question}"
 
-Here is the forecast data context:
+**FORECAST DATA:**
 - Product: {product.get('name', 'Unknown')} (SKU: {product.get('sku', 'N/A')})
-- Forecast horizon: {len(forecast)} days
-- Predicted demand (next 7 days): {forecast[:7] if forecast else 'N/A'}
-- Average daily demand: {avg_demand:.1f} units
-- Demand trend: {trend}
+- Next {len(forecast)} days demand: {forecast[:7] if forecast else 'N/A'}
+- Average: {avg_demand:.0f} units/day
+- Trend: {trend}
 - Scenario: {scenario}
-- Recommended stock level: {stock_data.get('recommended_stock', 'N/A')} units
-- Safety stock: {stock_data.get('safety_stock', 'N/A')} units
+- Recommended order: {stock_data.get('recommended_stock', 'N/A')} units
+- Safety buffer: {stock_data.get('safety_stock', 'N/A')} units
 
-Answer the user's question in 2-4 sentences, focusing on:
-1. Direct answer to their question
-2. Business impact (revenue, cost, or operational risk)
-3. One actionable recommendation
+**YOUR JOB:** Answer their question in 2-3 sentences with SPECIFIC recommendations.
 
-Keep it plain English, non-technical, business-focused. Under 120 words.
-"""
+**STRUCTURE:**
+1. Direct answer (with numbers)
+2. Business impact (money/risk/timeline)
+3. ONE action to take
+
+**RULES:**
+- Be specific (use the actual numbers from the data)
+- Avoid vague phrases like "you may want to consider"
+- Give concrete actions like "Order 200 units by Friday"
+
+Under 100 words, plain English."""
     
     response = _call_gemini_with_fallback(meta_prompt)
     
