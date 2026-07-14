@@ -5,68 +5,33 @@ import os
 import google.generativeai as genai
 from typing import Dict, Any, Optional
 
-# ============================================================================
-# MULTI-KEY ROTATION FOR QUOTA PROTECTION
-# ============================================================================
-# Free tier: 15 RPM, 1,500 RPD per key (varies by model)
-# Multiple keys ensure demo works even if one hits quota
-
+# Multi-key rotation for quota protection
 GEMINI_API_KEYS = [
-    os.getenv("GEMINI_API_KEY", ""),       # Primary key
-    os.getenv("GEMINI_API_KEY_2", ""),     # Backup key 1
-    os.getenv("GEMINI_API_KEY_3", ""),     # Backup key 2
+    os.getenv("GEMINI_API_KEY", ""),
+    os.getenv("GEMINI_API_KEY_2", ""),
+    os.getenv("GEMINI_API_KEY_3", ""),
 ]
 
-# Filter out empty keys
 GEMINI_API_KEYS = [k for k in GEMINI_API_KEYS if k.strip()]
 
 _current_key_index = 0
-_available_model = None  # Cache the working model
+_available_model = None
 
-# ============================================================================
-# DEBUGGING: Log key availability and discover models at startup
-# ============================================================================
-print(f"🔑 Gemini API Keys configured: {len(GEMINI_API_KEYS)}")
-for i, key in enumerate(GEMINI_API_KEYS):
-    masked = f"{key[:8]}...{key[-4:]}" if len(key) > 12 else "***"
-    print(f"  Key #{i+1}: {masked}")
-
-# DISCOVER AVAILABLE MODELS (like notebook does)
+# Discover available model at startup (minimal logging)
 if GEMINI_API_KEYS:
-    print("\n📋 Discovering available Gemini models...")
     try:
         genai.configure(api_key=GEMINI_API_KEYS[0])
-        
         available_models = []
         for m in genai.list_models():
-            if 'generateContent' in m.supported_generation_methods:
-                # Skip deprecated gemini-2.5-* models (404 errors for new users)
-                if 'gemini-2.5' in m.name.lower():
-                    print(f"  ⏭️  {m.name} (skipped - deprecated)")
-                    continue
+            if 'generateContent' in m.supported_generation_methods and 'gemini-2.5' not in m.name.lower():
                 available_models.append(m.name)
-                print(f"  ✅ {m.name}")
         
         if available_models:
-            # Prefer gemini-1.5-flash specifically (most stable)
-            if 'models/gemini-1.5-flash' in available_models:
-                _available_model = 'models/gemini-1.5-flash'
-                print(f"\n🎯 Selected model: {_available_model} (preferred stable model)")
-            else:
-                # Otherwise pick first available flash model
-                flash_models = [m for m in available_models if 'flash' in m.lower() and '1.5' in m]
-                _available_model = flash_models[0] if flash_models else available_models[0]
-                print(f"\n🎯 Selected model: {_available_model}")
+            _available_model = 'models/gemini-1.5-flash' if 'models/gemini-1.5-flash' in available_models else available_models[0]
         else:
-            print("  ⚠️ No models found - will try fallback")
-            _available_model = 'models/gemini-1.5-flash'  # Fallback to most stable
-    
-    except Exception as e:
-        print(f"  ⚠️ Could not list models: {e}")
-        print(f"  → Using fallback: models/gemini-1.5-flash")
+            _available_model = 'models/gemini-1.5-flash'
+    except Exception:
         _available_model = 'models/gemini-1.5-flash'
-else:
-    print("⚠️ No API keys configured")
 
 
 def _get_next_api_key() -> Optional[str]:
@@ -76,117 +41,58 @@ def _get_next_api_key() -> Optional[str]:
     if not GEMINI_API_KEYS:
         return None
     
-    # Try current key
     key = GEMINI_API_KEYS[_current_key_index]
-    
-    # Rotate to next key for next call (round-robin)
     _current_key_index = (_current_key_index + 1) % len(GEMINI_API_KEYS)
     
     return key
 
 
 def _call_gemini_with_fallback(prompt: str, max_retries: int = 3) -> Optional[str]:
-    """
-    Call Gemini API with automatic key rotation on failure
-    
-    Args:
-        prompt: The prompt to send to Gemini
-        max_retries: Number of keys to try before giving up
-    
-    Returns:
-        AI response text, or None if all keys fail
-    """
-    if not GEMINI_API_KEYS:
-        print("❌ No API keys configured!")
-        return None
-    
-    if not _available_model:
-        print("❌ No model available!")
+    """Call Gemini API with automatic key rotation on failure"""
+    if not GEMINI_API_KEYS or not _available_model:
         return None
     
     attempts = min(max_retries, len(GEMINI_API_KEYS))
-    last_error = None
     
-    for attempt in range(attempts):
-        # Store index BEFORE getting key (for accurate logging)
-        key_index = _current_key_index
+    for _ in range(attempts):
         api_key = _get_next_api_key()
-        
         if not api_key:
             continue
         
         try:
             genai.configure(api_key=api_key)
-            # Use the model we discovered at startup (like notebook does)
             model = genai.GenerativeModel(_available_model)
             response = model.generate_content(prompt)
-            
-            # Success!
-            print(f"✅ Gemini API success (key #{key_index + 1}, model: {_available_model})")
             return response.text
         
-        except Exception as e:
-            last_error = str(e)
-            print(f"⚠️ Gemini API failed with key #{key_index + 1}: {e}")
-            
-            # Check if it's a rate limit error
-            error_str = str(e).lower()
-            if "quota" in error_str or "rate limit" in error_str or "429" in error_str:
-                print(f"   → Rate limit hit on key #{key_index + 1}")
-            elif "api_key" in error_str or "invalid" in error_str or "401" in error_str:
-                print(f"   → Invalid API key #{key_index + 1}")
-            elif "403" in error_str or "denied access" in error_str:
-                print(f"   → Access denied for key #{key_index + 1} (project blocked)")
-            elif "404" in error_str or "not found" in error_str:
-                print(f"   → Model not found - may need to update model name")
-            
-            # Try next key
+        except Exception:
             continue
     
-    # All keys failed - log details
-    print(f"❌ All {len(GEMINI_API_KEYS)} API keys exhausted")
-    print(f"   Last error: {last_error}")
     return None
 
 
-# ============================================================================
-# PRE-BUILT AI INSIGHTS (3 SCENARIOS - RFP REQUIREMENT)
-# ============================================================================
-
 def get_forecast_insight(data: Dict[str, Any]) -> str:
-    """
-    Generate AI insight for forecast analysis
-    
-    Args:
-        data: dict with keys: forecast, product, scenario
-    
-    Returns:
-        AI-generated forecast insight (plain English)
-    """
+    """Generate AI insight for forecast analysis"""
     forecast = data['forecast']
     product = data['product']
     scenario = data.get('scenario', 'Normal conditions')
     
-    # Handle edge case: empty forecast
     if not forecast:
         return """📊 **Forecast Summary:** No forecast data available. Please generate a forecast first to see AI insights."""
     
     avg_demand = sum(forecast) / len(forecast)
     
-    # Fix trend calculation: handle equal values as "stable"
     if len(forecast) == 1:
         trend = "stable"
     elif forecast[-1] > forecast[0]:
         trend = "increasing"
     elif forecast[-1] < forecast[0]:
         trend = "decreasing"
-    else:  # forecast[-1] == forecast[0]
+    else:
         trend = "stable"
     
     max_demand = max(forecast)
     min_demand = min(forecast)
-    
-    # Calculate percentage change for more specific insights
     pct_change = ((forecast[-1] - forecast[0]) / forecast[0] * 100) if forecast[0] != 0 else 0
     
     prompt = f"""You are a retail inventory expert analyzing demand for {product['name']}.
@@ -217,26 +123,16 @@ Keep under 80 words. Be direct and specific."""
     if response:
         return response
     else:
-        # Fallback if all API keys fail
         return f"""📊 **Forecast Summary:** Average daily demand is {avg_demand:.1f} units over the next {len(forecast)} days, showing a {trend} trend. Demand ranges from {min_demand:.1f} to {max_demand:.1f} units. **Recommendation:** Plan inventory levels accordingly, considering the {trend} trend in your reorder calculations."""
 
 
 def get_stock_insight(data: Dict[str, Any]) -> str:
-    """
-    Generate AI insight for stock recommendations
-    
-    Args:
-        data: dict with keys: recommended_stock, reorder_point, safety_stock, lead_time_days
-    
-    Returns:
-        AI-generated stock recommendation insight
-    """
+    """Generate AI insight for stock recommendations"""
     recommended_stock = data['recommended_stock']
     reorder_point = data['reorder_point']
     safety_stock = data['safety_stock']
     lead_time_days = data['lead_time_days']
     
-    # Calculate useful ratios
     coverage_days = recommended_stock / (reorder_point / lead_time_days) if reorder_point > 0 else 0
     safety_pct = (safety_stock / recommended_stock * 100) if recommended_stock > 0 else 0
     
@@ -270,20 +166,11 @@ Be specific with numbers. Under 70 words."""
     if response:
         return response
     else:
-        # Fallback
         return f"""🎯 **Stock Recommendation:** Order {recommended_stock} units to cover {lead_time_days} days of demand plus a {safety_stock}-unit safety buffer. Set your reorder point at {reorder_point} units to avoid stockouts. This provides adequate protection against demand spikes."""
 
 
 def get_risk_insight(data: Dict[str, Any]) -> str:
-    """
-    Generate AI insight for risk assessment
-    
-    Args:
-        data: dict with keys: volatility, avg_demand, trend, scenario
-    
-    Returns:
-        AI-generated risk assessment
-    """
+    """Generate AI insight for risk assessment"""
     volatility = data['volatility']
     avg_demand = data['avg_demand']
     trend = data['trend']
@@ -323,28 +210,11 @@ Be direct about what could go wrong. Under 70 words."""
     if response:
         return response
     else:
-        # Fallback
         return f"""⚠️ **Risk Assessment:** Demand volatility is {volatility:.1f} units ({volatility_ratio:.1f}% of average), indicating {risk_level} risk. The {trend} trend adds uncertainty. **Mitigation:** {'Increase safety stock to handle demand spikes' if risk_level == 'HIGH' else 'Monitor closely for pattern changes'}."""
 
 
-# ============================================================================
-# CUSTOM Q&A (ADVANCED FEATURE - GOES BEYOND RFP)
-# ============================================================================
-
 def get_custom_ai_answer(question: str, context: Dict[str, Any]) -> str:
-    """
-    Answer custom user question using Gemini (META-PROMPTING)
-    
-    This is the advanced feature: Gemini creates its own system prompt
-    based on the user's question, then answers it!
-    
-    Args:
-        question: User's custom question (str)
-        context: Dict with forecast, product, stock_data, scenario
-    
-    Returns:
-        AI-generated answer (plain English)
-    """
+    """Answer custom user question using Gemini (META-PROMPTING)"""
     if not GEMINI_API_KEYS:
         return """⚠️ **AI Service Unavailable**
         
@@ -362,7 +232,6 @@ No API keys configured. Please add GEMINI_API_KEY to environment variables.
     
     avg_demand = sum(forecast) / len(forecast) if forecast else 0
     
-    # Fix trend calculation: handle equal values as "stable" (same as get_forecast_insight)
     if not forecast:
         trend = "unknown"
     elif len(forecast) == 1:
@@ -371,10 +240,9 @@ No API keys configured. Please add GEMINI_API_KEY to environment variables.
         trend = "increasing"
     elif forecast[-1] < forecast[0]:
         trend = "decreasing"
-    else:  # forecast[-1] == forecast[0]
+    else:
         trend = "stable"
     
-    # META-PROMPT: Let Gemini understand the question and frame its own answer
     meta_prompt = f"""You are a retail inventory analyst AI assistant. A buyer asked:
 
 "{question}"
@@ -419,8 +287,4 @@ All {len(GEMINI_API_KEYS)} API keys have hit rate limits or encountered errors.
 **Solutions:**
 1. Wait a few minutes and try again (rate limits reset)
 2. Generate fresh API keys at: https://aistudio.google.com/apikey
-3. Use DIFFERENT Google accounts for each key (keys from same account share quota)
-
-**Debug Info:**
-* Keys configured: {len(GEMINI_API_KEYS)}
-* Current model: {_available_model or 'Not discovered'}"""
+3. Use DIFFERENT Google accounts for each key (keys from same account share quota)"""
