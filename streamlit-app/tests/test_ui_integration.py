@@ -61,8 +61,9 @@ def test_product_selection_cat2():
     # Change product selection (selectbox index 0 is the product selector)
     at.selectbox[0].select("JUMBO BAG RED RETROSPOT").run()
     
-    # Verify product changed
-    assert "JUMBO BAG RED RETROSPOT" in str(at.title)
+    # Verify product changed by checking title values
+    title_values = [title.value for title in at.title]
+    assert any("JUMBO BAG RED RETROSPOT" in value for value in title_values)
 
 
 # ============================================================================
