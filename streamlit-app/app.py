@@ -4,38 +4,22 @@ Streamlit app for visualizing and analyzing demand forecasts
 """
 
 import os
-# Check if running in AppTest environment
-is_apptest = os.environ.get('APPTEST_MODE') == '1'
+import streamlit as st
+from components.sidebar import render_sidebar
+from components.charts import render_forecast_chart, render_inventory_chart
+from components.tabs import render_forecast_tab, render_data_tab, render_stock_tab, render_insights_tab
+from services.inventory import calculate_stock_recommendation
+from services.api_client import get_forecast
+from utils.config import PRODUCTS, FASTAPI_URL, API_KEY, keep_fastapi_warm
+import threading
+import time
 
-if not is_apptest:
-    import streamlit as st
-    from components.sidebar import render_sidebar
-    from components.charts import render_forecast_chart, render_inventory_chart
-    from components.tabs import render_forecast_tab, render_data_tab, render_stock_tab, render_insights_tab
-    from services.inventory import calculate_stock_recommendation
-    from services.api_client import get_forecast
-    from utils.config import PRODUCTS, FASTAPI_URL, API_KEY, keep_fastapi_warm
-    import threading
-    import time
-    
-    # Initialize session state
-    if "active_tab" not in st.session_state:
-        st.session_state.active_tab = "📊 Forecast Chart"
-else:
-    # For tests: import functions and config without UI components
-    from services.inventory import calculate_stock_recommendation
-    from services.api_client import get_forecast
-    from utils.config import PRODUCTS, FASTAPI_URL, API_KEY
-
-def _should_run_ui():
-    """Guard to prevent UI rendering during imports or AppTest setup."""
-    return not is_apptest
+# Initialize session state
+if "active_tab" not in st.session_state:
+    st.session_state.active_tab = "📊 Forecast Chart"
 
 def render_welcome_screen():
     """Display welcome screen when no forecast is generated."""
-    if not _should_run_ui():
-        return
-        
     st.markdown("""
     ## 👋 Welcome to the Retail Demand Forecasting Dashboard!
     
@@ -197,8 +181,9 @@ def main():
         # Show welcome screen
         render_welcome_screen()
 
-if __name__ == "__main__" and _should_run_ui():
+if __name__ == "__main__":
     # Start keep-alive thread for API warmth (only in non-test environments)
+    is_apptest = os.environ.get('APPTEST_MODE') == '1'
     if not is_apptest:
         keep_alive_thread = threading.Thread(
             target=keep_fastapi_warm,
