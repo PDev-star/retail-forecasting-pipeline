@@ -11,11 +11,10 @@ if not is_apptest:
     import streamlit as st
     from components.sidebar import render_sidebar
     from components.charts import render_forecast_chart, render_inventory_chart
-    from components.tabs import render_forecast_tab, render_data_tab, render_stock_tab
+    from components.tabs import render_forecast_tab, render_data_tab, render_stock_tab, render_insights_tab
     from services.inventory import calculate_stock_recommendation
     from services.api_client import get_forecast
     from utils.config import PRODUCTS, keep_fastapi_warm
-    from utils.ai_insights_integration import render_insights_tab
     import threading
     import time
     
