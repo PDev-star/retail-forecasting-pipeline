@@ -70,15 +70,6 @@ def _should_run_ui() -> bool:
     return True
 
 
-# Start keep-alive thread (only when UI should run)
-if _should_run_ui():
-    if FASTAPI_URL != "http://localhost:8000":
-        if "keep_alive_started" not in st.session_state:
-            st.session_state.keep_alive_started = True
-            ping_thread = threading.Thread(target=keep_fastapi_warm, daemon=True)
-            ping_thread.start()
-            print(f"🚀 Keep-alive thread started for {FASTAPI_URL}")
-
 # ============================================================================
 # UI COMPONENTS
 # ============================================================================
@@ -96,6 +87,14 @@ from components.tabs import (
 # ============================================================================
 
 if _should_run_ui():
+    # Start keep-alive thread (MOVED INSIDE UI guard to prevent test issues)
+    if FASTAPI_URL != "http://localhost:8000":
+        if "keep_alive_started" not in st.session_state:
+            st.session_state.keep_alive_started = True
+            ping_thread = threading.Thread(target=keep_fastapi_warm, daemon=True)
+            ping_thread.start()
+            print(f"🚀 Keep-alive thread started for {FASTAPI_URL}")
+    
     # Render sidebar and get parameters
     sidebar_state = render_sidebar(PRODUCTS)
     
@@ -138,13 +137,13 @@ if _should_run_ui():
         product = st.session_state["product"]
         lead_time_days = st.session_state["lead_time_days"]
     
-        # Create tabs
+        # Create tabs with persistent state
         tab1, tab2, tab3, tab4 = st.tabs([
             "📊 Forecast Chart",
             "📋 Data Table",
             "🎯 Stock Recommendations",
             "💡 AI Insights",
-        ])
+        ], key="main_tabs")
     
         with tab1:
             df_forecast = render_forecast_tab(forecast, horizon, product, scenario_desc)
@@ -159,8 +158,5 @@ if _should_run_ui():
             render_insights_tab(forecast, product, scenario_desc, lead_time_days, calculate_stock_recommendation)
     
     else:
+        # Show welcome screen
         render_welcome_screen()
-    
-    # Footer
-    st.markdown("---")
-    st.caption("🚀 InventoryForge v1.0 | Built for Impact pSiddhi S2-D-02 | Powered by Databricks + Streamlit")
