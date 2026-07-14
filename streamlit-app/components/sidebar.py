@@ -61,11 +61,7 @@ def render_sidebar(PRODUCTS):
     # Display SKU as caption below selectbox
     st.sidebar.caption(f"SKU: {product['sku']} • Category: {selected_category}")
     
-    # Forecast Horizon
-    st.sidebar.markdown("### Forecast Parameters")
-    horizon = st.sidebar.slider("Forecast Horizon (days)", min_value=7, max_value=90, value=30, step=7)
-    
-    # What-If Scenarios
+    # What-If Scenarios (MOVED UP to prevent dropdown cut-off)
     st.sidebar.markdown("---")
     st.sidebar.markdown("### What-If Scenarios")
     
@@ -126,6 +122,11 @@ def render_sidebar(PRODUCTS):
         adjustment_factor = 1.0
         scenario_desc = "Standard business-as-usual forecast"
         lead_time_days = 14
+    
+    # Forecast Horizon (MOVED DOWN - single line, can't be cut off)
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("### Forecast Parameters")
+    horizon = st.sidebar.slider("Forecast Horizon (days)", min_value=7, max_value=90, value=30, step=7)
     
     return {
         "selected_category": selected_category,
