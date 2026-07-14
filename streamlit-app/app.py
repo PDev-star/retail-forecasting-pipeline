@@ -137,13 +137,13 @@ if _should_run_ui():
         product = st.session_state["product"]
         lead_time_days = st.session_state["lead_time_days"]
     
-        # Create tabs with persistent state
+        # Create tabs (no key parameter - not supported in older Streamlit versions)
         tab1, tab2, tab3, tab4 = st.tabs([
             "📊 Forecast Chart",
             "📋 Data Table",
             "🎯 Stock Recommendations",
             "💡 AI Insights",
-        ], key="main_tabs")
+        ])
     
         with tab1:
             df_forecast = render_forecast_tab(forecast, horizon, product, scenario_desc)

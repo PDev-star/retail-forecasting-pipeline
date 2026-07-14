@@ -71,9 +71,21 @@ def render_sidebar(PRODUCTS):
     
     scenario_type = st.sidebar.selectbox(
         "Scenario Type",
-        ["Normal", "Promotion (+30%)", "Supply Disruption", "Seasonal Peak (+50%)"],
+        [
+            "Normal",
+            "Promotion (+30%)",
+            "Supply Disruption",
+            "Seasonal Peak (+50%)",
+            "Black Friday Sale (+80%)",
+            "End of Season Clearance (+40%)",
+            "Product Launch (+60%)",
+            "Competitor Entry (-20%)",
+            "Economic Downturn (-30%)",
+            "Holiday Season (+70%)",
+        ],
     )
     
+    # Scenario logic with all 10 scenarios
     if scenario_type == "Promotion (+30%)":
         adjustment_factor = 1.3
         scenario_desc = "30% demand increase due to promotional campaign"
@@ -86,7 +98,31 @@ def render_sidebar(PRODUCTS):
         adjustment_factor = 1.5
         scenario_desc = "50% demand increase during seasonal peak"
         lead_time_days = 14
-    else:
+    elif scenario_type == "Black Friday Sale (+80%)":
+        adjustment_factor = 1.8
+        scenario_desc = "80% demand surge during Black Friday event"
+        lead_time_days = 10
+    elif scenario_type == "End of Season Clearance (+40%)":
+        adjustment_factor = 1.4
+        scenario_desc = "40% demand increase during clearance sale"
+        lead_time_days = 14
+    elif scenario_type == "Product Launch (+60%)":
+        adjustment_factor = 1.6
+        scenario_desc = "60% demand increase for new product launch"
+        lead_time_days = 21
+    elif scenario_type == "Competitor Entry (-20%)":
+        adjustment_factor = 0.8
+        scenario_desc = "20% demand decrease due to new competitor"
+        lead_time_days = 14
+    elif scenario_type == "Economic Downturn (-30%)":
+        adjustment_factor = 0.7
+        scenario_desc = "30% demand decrease during economic slowdown"
+        lead_time_days = 21
+    elif scenario_type == "Holiday Season (+70%)":
+        adjustment_factor = 1.7
+        scenario_desc = "70% demand increase during holiday season"
+        lead_time_days = 10
+    else:  # Normal
         adjustment_factor = 1.0
         scenario_desc = "Standard business-as-usual forecast"
         lead_time_days = 14
