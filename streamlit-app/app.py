@@ -70,15 +70,6 @@ def _should_run_ui() -> bool:
     return True
 
 
-# Start keep-alive thread (only when UI should run)
-if _should_run_ui():
-    if FASTAPI_URL != "http://localhost:8000":
-        if "keep_alive_started" not in st.session_state:
-            st.session_state.keep_alive_started = True
-            ping_thread = threading.Thread(target=keep_fastapi_warm, daemon=True)
-            ping_thread.start()
-            print(f"🚀 Keep-alive thread started for {FASTAPI_URL}")
-
 # ============================================================================
 # UI COMPONENTS
 # ============================================================================
@@ -96,6 +87,60 @@ from components.tabs import (
 # ============================================================================
 
 if _should_run_ui():
+    # Start keep-alive thread (MOVED INSIDE UI guard to prevent test issues)
+    if FASTAPI_URL != "http://localhost:8000":
+        if "keep_alive_started" not in st.session_state:
+            st.session_state.keep_alive_started = True
+            ping_thread = threading.Thread(target=keep_fastapi_warm, daemon=True)
+            ping_thread.start()
+            print(f"🚀 Keep-alive thread started for {FASTAPI_URL}")
+    # Custom CSS for smooth tab transitions
+    st.markdown("""
+        <style>
+        /* Smooth fade-in animation for tab content */
+        .main .block-container {
+            animation: fadeIn 0.3s ease-in;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        /* Style radio buttons to look more like tabs */
+        div[role="radiogroup"] {
+            gap: 0.5rem;
+            padding: 0.5rem 0;
+        }
+        
+        div[role="radiogroup"] label {
+            background-color: transparent;
+            padding: 0.5rem 1rem;
+            border-radius: 0.5rem;
+            transition: all 0.2s ease;
+            cursor: pointer;
+        }
+        
+        div[role="radiogroup"] label:hover {
+            background-color: rgba(255, 75, 75, 0.1);
+        }
+        
+        div[role="radiogroup"] label[data-baseweb="radio"] > div:first-child {
+            display: none; /* Hide radio circles */
+        }
+        
+        /* Highlight selected tab */
+        div[role="radiogroup"] label:has(input:checked) {
+            background-color: rgba(255, 75, 75, 0.15);
+            font-weight: 600;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+    
+    # Initialize active tab in session state
+    if "active_tab" not in st.session_state:
+        st.session_state.active_tab = "📊 Forecast Chart"
+    
     # Render sidebar and get parameters
     sidebar_state = render_sidebar(PRODUCTS)
     
@@ -116,11 +161,11 @@ if _should_run_ui():
     if st.button("🔮 Generate Forecast", type="primary", use_container_width=True):
         with st.spinner(f"Fetching {horizon}-day forecast via FastAPI Gateway..."):
             forecast = get_forecast(product["product_id"], horizon)
-    
+            
             if forecast:
                 # Apply scenario adjustment
                 adjusted_forecast = [val * adjustment_factor for val in forecast]
-    
+                
                 # Store in session state
                 st.session_state["forecast"] = adjusted_forecast
                 st.session_state["scenario"] = scenario_desc
@@ -138,29 +183,57 @@ if _should_run_ui():
         product = st.session_state["product"]
         lead_time_days = st.session_state["lead_time_days"]
     
-        # Create tabs
-        tab1, tab2, tab3, tab4 = st.tabs([
-            "📊 Forecast Chart",
-            "📋 Data Table",
-            "🎯 Stock Recommendations",
-            "💡 AI Insights",
-        ])
-    
-        with tab1:
-            df_forecast = render_forecast_tab(forecast, horizon, product, scenario_desc)
-    
-        with tab2:
-            render_data_tab(df_forecast, product)
-    
-        with tab3:
-            render_stock_tab(forecast, lead_time_days, calculate_stock_recommendation)
-    
-        with tab4:
-            render_insights_tab(forecast, product, scenario_desc, lead_time_days, calculate_stock_recommendation)
+        # Tab navigation using radio (with fixed state management)
+        tab_options = ["📊 Forecast Chart", "📋 Data Table", "🎯 Stock Recommendations", "💡 AI Insights"]
+        
+        # Get current tab index (default to 0 if not found)
+        try:
+            current_index = tab_options.index(st.session_state.active_tab)
+        except (ValueError, AttributeError):
+            current_index = 0
+            st.session_state.active_tab = tab_options[0]
+        
+        # Render radio buttons with proper state
+        selected_tab = st.radio(
+            "Navigation",
+            tab_options,
+            index=current_index,
+            horizontal=True,
+            label_visibility="collapsed",
+            key="tab_selector"  # Stable key to prevent re-initialization
+        )
+        
+        # Update session state ONLY if tab changed
+        if selected_tab != st.session_state.active_tab:
+            st.session_state.active_tab = selected_tab
+            st.rerun()  # Force immediate rerun for smooth transition
+        
+        st.markdown("---")
+        
+        # Render selected tab (wrapped in a container for smooth transitions)
+        tab_container = st.container()
+        
+        with tab_container:
+            if st.session_state.active_tab == "📊 Forecast Chart":
+                df_forecast = render_forecast_tab(forecast, horizon, product, scenario_desc)
+            
+            elif st.session_state.active_tab == "📋 Data Table":
+                # Generate df_forecast if not already available
+                import pandas as pd
+                from datetime import datetime, timedelta
+                dates = [(datetime.now() + timedelta(days=i)).strftime("%Y-%m-%d") for i in range(1, horizon + 1)]
+                df_forecast = pd.DataFrame({
+                    "Date": dates,
+                    "Predicted Demand": forecast
+                })
+                render_data_tab(df_forecast, product)
+            
+            elif st.session_state.active_tab == "🎯 Stock Recommendations":
+                render_stock_tab(forecast, lead_time_days, calculate_stock_recommendation)
+            
+            elif st.session_state.active_tab == "💡 AI Insights":
+                render_insights_tab(forecast, product, scenario_desc, lead_time_days, calculate_stock_recommendation)
     
     else:
+        # Show welcome screen
         render_welcome_screen()
-    
-    # Footer
-    st.markdown("---")
-    st.caption("🚀 InventoryForge v1.0 | Built for Impact pSiddhi S2-D-02 | Powered by Databricks + Streamlit")

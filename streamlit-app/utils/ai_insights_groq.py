@@ -3,36 +3,18 @@
 # Groq mentioned in RFP - ideal alternative to Gemini
 
 import os
-import sys
 from groq import Groq
 from typing import Dict, Any, Optional
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 
-# Enhanced logging for debugging
-if GROQ_API_KEY:
-    masked = f"{GROQ_API_KEY[:7]}...{GROQ_API_KEY[-4:]}" if len(GROQ_API_KEY) > 11 else "***"
-    print(f"🔑 Groq API Key configured: {masked}", flush=True)
-    print(f"🚀 Using Groq inference (ultra-fast, RFP-approved)", flush=True)
-    sys.stderr.write(f"DEBUG: Groq key length = {len(GROQ_API_KEY)}\n")
-    sys.stderr.flush()
-else:
-    print("⚠️ No Groq API key configured", flush=True)
-    sys.stderr.write("ERROR: GROQ_API_KEY environment variable is empty!\n")
-    sys.stderr.flush()
-
 
 def _call_groq(prompt: str) -> Optional[str]:
-    """Call Groq API with enhanced error reporting"""
+    """Call Groq API with error handling"""
     if not GROQ_API_KEY:
-        error_msg = "❌ No Groq API key configured!"
-        print(error_msg, flush=True)
-        sys.stderr.write(f"ERROR: {error_msg}\n")
-        sys.stderr.flush()
         return None
     
     try:
-        print(f"🌐 Calling Groq API (model: llama-3.3-70b-versatile)...", flush=True)
         client = Groq(api_key=GROQ_API_KEY)
         chat_completion = client.chat.completions.create(
             messages=[
@@ -45,27 +27,9 @@ def _call_groq(prompt: str) -> Optional[str]:
             top_p=1,
             stream=False
         )
-        result = chat_completion.choices[0].message.content
-        print(f"✅ Groq API success (model: llama-3.3-70b-versatile)", flush=True)
-        return result
+        return chat_completion.choices[0].message.content
     
-    except Exception as e:
-        error_details = f"⚠️ Groq API failed: {type(e).__name__}: {str(e)}"
-        print(error_details, flush=True)
-        sys.stderr.write(f"ERROR: {error_details}\n")
-        sys.stderr.flush()
-        
-        # Check for specific error types
-        error_str = str(e).lower()
-        if "rate" in error_str or "429" in error_str:
-            print("   → Rate limit hit (30 RPM)", flush=True)
-        elif "quota" in error_str or "exceeded" in error_str:
-            print("   → Daily quota exceeded (14,400 RPD)", flush=True)
-        elif "401" in error_str or "unauthorized" in error_str:
-            print("   → Invalid API key", flush=True)
-        elif "403" in error_str or "forbidden" in error_str:
-            print("   → Access denied", flush=True)
-        
+    except Exception:
         return None
 
 
@@ -181,18 +145,14 @@ Keep it under 80 words, focus on business risk."""
 
 def get_custom_ai_answer(question: str, context: Dict[str, Any]) -> str:
     """Answer custom user question using Groq (META-PROMPTING)"""
-    print(f"🤔 Custom Q&A called with question: {question[:50]}...", flush=True)
-    
     if not GROQ_API_KEY:
         return """⚠️ **AI Service Unavailable**
         
-No API key configured. Please add GROQ_API_KEY to environment variables.
+No Groq API key configured. Please add GROQ_API_KEY to environment variables.
 
 **For Streamlit Cloud:**
 1. Go to app settings → Secrets
-2. Add: GROQ_API_KEY = "your-key-here"
-
-**Get a free key:** https://console.groq.com/keys"""
+2. Add: `GROQ_API_KEY = "your-key-here"`"""
     
     forecast = context.get('forecast', [])
     product = context.get('product', {})
@@ -212,49 +172,28 @@ No API key configured. Please add GROQ_API_KEY to environment variables.
     else:
         trend = "stable"
     
-    meta_prompt = f"""You are a retail inventory analyst AI assistant. A business user asked this question:
+    prompt = f"""You are a retail inventory analyst AI assistant. A buyer asked:
 
 "{question}"
 
-Here is the forecast data context:
+FORECAST DATA:
 - Product: {product.get('name', 'Unknown')} (SKU: {product.get('sku', 'N/A')})
-- Forecast horizon: {len(forecast)} days
-- Predicted demand (next 7 days): {forecast[:7] if forecast else 'N/A'}
-- Average daily demand: {avg_demand:.1f} units
-- Demand trend: {trend}
+- Next {len(forecast)} days demand: {forecast[:7] if forecast else 'N/A'}
+- Average: {avg_demand:.0f} units/day
+- Trend: {trend}
 - Scenario: {scenario}
-- Recommended stock level: {stock_data.get('recommended_stock', 'N/A')} units
-- Safety stock: {stock_data.get('safety_stock', 'N/A')} units
+- Recommended order: {stock_data.get('recommended_stock', 'N/A')} units
+- Safety buffer: {stock_data.get('safety_stock', 'N/A')} units
 
-Answer the user's question in 2-4 sentences, focusing on:
-1. Direct answer to their question
-2. Business impact (revenue, cost, or operational risk)
-3. One actionable recommendation
+Answer their question in 2-3 sentences. Be specific and actionable.
 
-Keep it plain English, non-technical, business-focused. Under 120 words."""
+Keep under 100 words, plain English."""
     
-    response = _call_groq(meta_prompt)
+    response = _call_groq(prompt)
     
     if response:
         return response
     else:
-        # Enhanced error message with actual error details
-        key_status = f"Key present: {len(GROQ_API_KEY)} chars" if GROQ_API_KEY else "No key configured"
-        return f"""⚠️ **AI Service Temporarily Unavailable**
+        return """⚠️ **AI Service Temporarily Unavailable**
 
-Groq API encountered an error. This could be due to:
-* Rate limits (30 requests per minute)
-* Daily quota exceeded (14,400 requests per day)
-* Temporary service issue
-* Invalid API key
-
-**Debug Info:**
-* API Key Status: {key_status}
-
-**Solutions:**
-1. Wait a minute and try again
-2. Check your Groq dashboard: https://console.groq.com
-3. Verify API key is valid
-4. Check Streamlit Cloud logs for detailed error
-
-The fallback text-based insights are still available above."""
+Groq API encountered an error. Please try again in a moment."""
