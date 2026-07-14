@@ -234,7 +234,7 @@ No Groq API key configured. Please add GROQ_API_KEY to environment variables.
 
 Under 100 words, plain English."""
     
-    response = _call_groq(prompt)
+    response = _call_groq(meta_prompt)
     
     if response:
         return response
