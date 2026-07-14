@@ -1,48 +1,93 @@
-"""
-Retail Demand Forecasting Dashboard
-Streamlit app for visualizing and analyzing demand forecasts
-"""
+# app.py - Retail Forecasting Streamlit App
+# Deploy to Streamlit Community Cloud
 
+import sys
 import os
-import streamlit as st
-from components.sidebar import render_sidebar
-from components.charts import render_forecast_chart, render_inventory_chart
-from components.tabs import render_forecast_tab, render_data_tab, render_stock_tab, render_insights_tab
-from services.inventory import calculate_stock_recommendation
-from services.api_client import get_forecast
-from utils.config import PRODUCTS, FASTAPI_URL, API_KEY, keep_fastapi_warm
 import threading
-import time
 
-# Initialize session state
-if "active_tab" not in st.session_state:
-    st.session_state.active_tab = "📊 Forecast Chart"
+# Conditional streamlit import - tests import functions without running UI
+try:
+    import streamlit as st
+    
+    # Page configuration (only when streamlit is available)
+    st.set_page_config(
+        page_title="Retail Forecasting Engine",
+        page_icon="📊",
+        layout="wide",
+        initial_sidebar_state="expanded",
+    )
+except ImportError:
+    # Test environment - create minimal mock for imports
+    class MockStreamlit:
+        class session_state(dict):
+            pass
+        session_state = session_state()
+        @staticmethod
+        def set_page_config(**kwargs): pass
+        def __getattr__(self, name):
+            return lambda *args, **kwargs: None
+    st = MockStreamlit()
 
-def render_welcome_screen():
-    """Display welcome screen when no forecast is generated."""
-    st.markdown("""
-    ## 👋 Welcome to the Retail Demand Forecasting Dashboard!
-    
-    Get started by:
-    1. **Select a product** from the sidebar
-    2. **Choose a scenario** (Normal, Promotion, Supply Disruption, etc.)
-    3. **Adjust the forecast horizon** (7-90 days)
-    4. Click **"Generate Forecast"** to see predictions
-    
-    ### 🎯 What You'll Get:
-    - 📊 **Interactive forecast charts** with trend analysis
-    - 📋 **Detailed data tables** with downloadable CSV
-    - 🎯 **Stock recommendations** based on demand and lead times
-    - 💡 **AI-powered insights** to help you make better decisions
-    """)
-    
-    st.info("💡 **Tip:** Try different scenarios to see how promotions, supply disruptions, or seasonal peaks affect demand!")
+# ============================================================================
+# CONFIGURATION AND SERVICES
+# ============================================================================
+from utils.config import FASTAPI_URL, API_KEY, PRODUCTS, keep_fastapi_warm
+from services.api_client import get_forecast
+from services.inventory import calculate_stock_recommendation
 
-def main():
+# Re-export for backward compatibility (tests import from app)
+__all__ = ['get_forecast', 'calculate_stock_recommendation', 'FASTAPI_URL', 'API_KEY', 'PRODUCTS']
+
+
+# ============================================================================
+# SMART PYTEST GUARD
+# ============================================================================
+# This guard allows:
+#   1. Normal Streamlit app execution (pytest not in modules)
+#   2. Integration tests via AppTest (APPTEST_MODE=1)
+#   3. Blocks UI for unit tests (pytest in modules, no APPTEST_MODE)
+
+def _should_run_ui() -> bool:
+    """
+    Determine if UI code should execute.
+    
+    Returns True when:
+      - APPTEST_MODE=1 (integration tests need UI)
+      - OR pytest not in sys.modules (normal Streamlit app)
+    
+    Returns False when:
+      - pytest in sys.modules AND no APPTEST_MODE (unit tests)
+    """
+    # Integration tests explicitly set APPTEST_MODE
+    if os.environ.get('APPTEST_MODE') == '1':
+        return True
+    
+    # Unit tests have pytest in modules but no APPTEST_MODE
+    if 'pytest' in sys.modules or 'PYTEST_CURRENT_TEST' in os.environ:
+        return False
+    
+    # Normal Streamlit app execution
+    return True
+
+
+# ============================================================================
+# UI COMPONENTS
+# ============================================================================
+from components.sidebar import render_sidebar
+from components.tabs import (
+    render_forecast_tab,
+    render_data_tab,
+    render_stock_tab,
+    render_insights_tab,
+    render_welcome_screen,
+)
+
+# ============================================================================
+# MAIN APP (Skip during unit testing, run for integration tests)
+# ============================================================================
+
+if _should_run_ui():
     """Main app function."""
-    if not _should_run_ui():
-        return
-    
     # Custom CSS for smooth tab transitions
     st.markdown("""
         <style>
@@ -181,9 +226,8 @@ def main():
         # Show welcome screen
         render_welcome_screen()
 
-if __name__ == "__main__":
+if __name__ == "__main__" and _should_run_ui():
     # Start keep-alive thread for API warmth (only in non-test environments)
-    is_apptest = os.environ.get('APPTEST_MODE') == '1'
     if not is_apptest:
         keep_alive_thread = threading.Thread(
             target=keep_fastapi_warm,
