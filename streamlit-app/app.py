@@ -14,13 +14,18 @@ if not is_apptest:
     from components.tabs import render_forecast_tab, render_data_tab, render_stock_tab, render_insights_tab
     from services.inventory import calculate_stock_recommendation
     from services.api_client import get_forecast
-    from utils.config import PRODUCTS, keep_fastapi_warm
+    from utils.config import PRODUCTS, FASTAPI_URL, API_KEY, keep_fastapi_warm
     import threading
     import time
     
     # Initialize session state
     if "active_tab" not in st.session_state:
         st.session_state.active_tab = "📊 Forecast Chart"
+else:
+    # For tests: import functions and config without UI components
+    from services.inventory import calculate_stock_recommendation
+    from services.api_client import get_forecast
+    from utils.config import PRODUCTS, FASTAPI_URL, API_KEY
 
 def _should_run_ui():
     """Guard to prevent UI rendering during imports or AppTest setup."""
@@ -195,10 +200,9 @@ def main():
 if __name__ == "__main__" and _should_run_ui():
     # Start keep-alive thread for API warmth (only in non-test environments)
     if not is_apptest:
-        from utils.config import FASTAPI_BASE_URL
         keep_alive_thread = threading.Thread(
             target=keep_fastapi_warm,
-            args=(FASTAPI_BASE_URL,),
+            args=(FASTAPI_URL,),
             daemon=True
         )
         keep_alive_thread.start()
