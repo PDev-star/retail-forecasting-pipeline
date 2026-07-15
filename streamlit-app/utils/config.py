@@ -9,10 +9,22 @@ try:
     import streamlit as st
     FASTAPI_URL = st.secrets.get("fastapi_url", "http://localhost:8000")
     API_KEY = st.secrets.get("api_key", "demo-key-12345")
+    
+    # Multi-key support for Gemini API (quota protection)
+    # Export as environment variables for utils/ai_insights.py
+    import os
+    if "gemini_api_key" in st.secrets:
+        os.environ["GEMINI_API_KEY"] = st.secrets["gemini_api_key"]
+    if "gemini_api_key_2" in st.secrets:
+        os.environ["GEMINI_API_KEY_2"] = st.secrets["gemini_api_key_2"]
+    if "gemini_api_key_3" in st.secrets:
+        os.environ["GEMINI_API_KEY_3"] = st.secrets["gemini_api_key_3"]
+        
 except (ImportError, AttributeError, FileNotFoundError):
     # Test environment - use defaults (no secrets file or streamlit not available)
     FASTAPI_URL = "http://localhost:8000"
     API_KEY = "demo-key-12345"
+    # Gemini keys read from environment variables in ai_insights.py
 
 # Product catalog - maps to FastAPI product IDs
 PRODUCTS = {

@@ -2,7 +2,7 @@ name: Streamlit App Tests
 
 on:
   push:
-    branches: [ GitConnectionTest, main, staging ]
+    branches: [ GitConnectionTest, main, staging, Feature-Branch---AI-insights-in-Streamlit, Feature-branch---Update-Site-UI ]
   pull_request:
     branches: [ main, staging ]
 
@@ -30,7 +30,7 @@ jobs:
         PYTHONPATH: .
       run: |
         cd streamlit-app
-        pytest tests/test_api_client.py tests/test_app.py tests/test_config.py tests/test_inventory.py \
+        pytest tests/test_api_client.py tests/test_app.py tests/test_config.py tests/test_inventory.py tests/test_ai_insights.py tests/test_ai_insights_groq.py tests/test_ai_insights_integration.py \
           --cov=. --cov-report= -v
     
     - name: Run integration tests with coverage
@@ -55,4 +55,6 @@ jobs:
     
     - name: Test Summary
       run: |
-        echo "✅ Streamlit tests passed with 97.45% coverage!"
+        echo "✅ Streamlit tests passed!"
+        echo "🧪 AI Insights tests: ✅ (Gemini + Groq unit tests + integration)"
+        echo "📊 Coverage maintained: 80%+ required"
