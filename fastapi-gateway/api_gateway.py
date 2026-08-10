@@ -27,6 +27,9 @@ DATABRICKS_HOST = os.environ.get("DATABRICKS_HOST", "https://dbc-7e8a8bf0-dc9f.c
 DATABRICKS_TOKEN = os.environ.get("DATABRICKS_TOKEN")
 VALID_API_KEYS = set(os.environ.get("API_KEYS", "demo-key-12345").split(","))
 
+# SQL Warehouse for Delta Lake queries
+SQL_WAREHOUSE_ID = os.environ.get("SQL_WAREHOUSE_ID", "907cc979fc71d54f")
+
 PRODUCTS = {
     "Cat1": {"name": "WHITE HANGING HEART T-LIGHT HOLDER", "endpoint": "Cat1Forecast"},
     "Cat2": {"name": "JUMBO BAG RED RETROSPOT", "endpoint": "Cat2Forecast"},
@@ -48,6 +51,7 @@ async def root():
         "endpoints": {
             "POST /forecast": "Get demand forecast",
             "GET /products": "List products",
+            "GET /ai-insights": "Get Gemini AI explanations from Delta Lake",
         },
     }
 
@@ -101,3 +105,90 @@ async def get_forecast(product_id: str, horizon: int = 14, api_key: str = Header
 
     except requests.RequestException as e:
         raise HTTPException(status_code=503, detail=str(e))
+
+
+@app.get("/ai-insights")
+async def get_ai_insights(scenario_id: int = None, api_key: str = Header(..., alias="X-API-Key")):
+    """
+    Get Gemini 2.5 Flash AI explanations from Delta Lake cache.
+    
+    Args:
+        scenario_id: Optional scenario filter (1, 2, or 3)
+        api_key: API key for authentication
+    
+    Returns:
+        List of AI insights with scenario metadata
+    """
+    verify_api_key(api_key)
+    
+    try:
+        # Build SQL query
+        base_query = """
+            SELECT 
+                scenario_id,
+                scenario_name,
+                ai_provider,
+                prompt_type,
+                question,
+                context_table,
+                explanation,
+                generated_at
+            FROM workspace.default.gemini_ai_explanations
+        """
+        
+        if scenario_id:
+            base_query += f" WHERE scenario_id = {scenario_id}"
+        
+        base_query += " ORDER BY scenario_id"
+        
+        # Execute via Databricks SQL Execution API
+        response = requests.post(
+            f"{DATABRICKS_HOST}/api/2.0/sql/statements",
+            headers={
+                "Authorization": f"Bearer {DATABRICKS_TOKEN}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "warehouse_id": SQL_WAREHOUSE_ID,
+                "statement": base_query,
+                "wait_timeout": "30s"
+            },
+            timeout=35,
+        )
+        
+        if response.status_code != 200:
+            raise HTTPException(
+                status_code=502, 
+                detail=f"Delta Lake query failed: {response.text}"
+            )
+        
+        result = response.json()
+        
+        # Check if query succeeded
+        if result.get("status", {}).get("state") != "SUCCEEDED":
+            raise HTTPException(
+                status_code=502,
+                detail="Query execution failed"
+            )
+        
+        # Parse results
+        insights = []
+        if "result" in result and "data_array" in result["result"]:
+            columns = [col["name"] for col in result["result"]["manifest"]["schema"]["columns"]]
+            
+            for row in result["result"]["data_array"]:
+                insight = dict(zip(columns, row))
+                insights.append(insight)
+        
+        return {
+            "success": True,
+            "total": len(insights),
+            "insights": insights,
+            "cached": True,  # Indicates these are pre-generated
+            "generated_at": datetime.utcnow().isoformat()
+        }
+        
+    except requests.RequestException as e:
+        raise HTTPException(status_code=503, detail=f"Database connection error: {str(e)}")
+    except KeyError as e:
+        raise HTTPException(status_code=500, detail=f"Response parsing error: {str(e)}")
