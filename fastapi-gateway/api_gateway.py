@@ -184,6 +184,15 @@ async def get_ai_insights(scenario_id: int = None, api_key: str = Header(..., al
         # Parse results (handle empty results gracefully)
         insights = []
         if "result" in result and "data_array" in result["result"]:
+            # DEBUG: Check manifest structure
+            has_manifest = "manifest" in result["result"]
+            print(f"[DEBUG] Has manifest: {has_manifest}")
+            if has_manifest:
+                has_schema = "schema" in result["result"]["manifest"]
+                print(f"[DEBUG] Has schema in manifest: {has_schema}")
+                if has_schema:
+                    print(f"[DEBUG] Column count: {len(result['result']['manifest']['schema']['columns'])}")
+            
             # Check if manifest exists (it won't if table doesn't exist or is empty)
             if "manifest" in result["result"] and "schema" in result["result"]["manifest"]:
                 columns = [col["name"] for col in result["result"]["manifest"]["schema"]["columns"]]
