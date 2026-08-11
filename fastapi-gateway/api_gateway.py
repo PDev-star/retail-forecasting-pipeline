@@ -180,6 +180,17 @@ async def get_ai_insights(scenario_id: int = None, api_key: str = Header(..., al
                 insight = dict(zip(columns, row))
                 insights.append(insight)
         
+        # Return results (with helpful message if table doesn't exist)
+        if len(insights) == 0:
+            return {
+                "success": True,
+                "total": 0,
+                "insights": [],
+                "cached": True,
+                "message": "No AI insights found. Run the Gemini notebook cells to populate Delta Lake cache.",
+                "generated_at": datetime.utcnow().isoformat()
+            }
+        
         return {
             "success": True,
             "total": len(insights),
