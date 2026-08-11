@@ -101,9 +101,9 @@ def render_stock_tab(forecast, lead_time_days, calculate_stock_recommendation):
 
 
 def render_insights_tab(forecast, product, scenario_desc, lead_time_days, calculate_stock_recommendation):
-    """Render the AI insights tab with REAL Groq AI."""
+    """Render the AI insights tab with DUAL AI: Gemini (cached) + Groq (real-time Q&A)."""
     st.markdown("### 💡 AI-Powered Insights")
-    st.markdown("*Powered by Groq LLaMA 3.3 70B - Ultra-fast AI explanations in plain English*")
+    st.markdown("*Dual-AI approach: Gemini 2.5 Flash (RFP-validated explanations) + Groq LLaMA 3.3 70B (interactive Q&A)*")
     st.markdown("---")
 
     # Calculate metrics
@@ -115,8 +115,50 @@ def render_insights_tab(forecast, product, scenario_desc, lead_time_days, calcul
     volatility = max(forecast) - min(forecast)
     
     # =========================================================================
-    # PRE-BUILT AI INSIGHTS (3 SCENARIOS - RFP REQUIREMENT)
+    # GEMINI 2.5 FLASH EXPLANATIONS (FROM DELTA LAKE - RFP COMPLIANCE)
     # =========================================================================
+    import requests
+    from utils.config import FASTAPI_URL, API_KEY
+    
+    st.markdown("#### 🔬 Gemini 2.5 Flash: RFP-Validated Scenario Explanations")
+    st.caption("Pre-generated explanations from notebook analysis, cached in Delta Lake")
+    
+    try:
+        # Fetch Gemini insights from FastAPI
+        response = requests.get(
+            f"{FASTAPI_URL}/ai-insights",
+            headers={"X-API-Key": API_KEY},
+            timeout=10
+        )
+        
+        if response.status_code == 200:
+            data = response.json()
+            if data.get("success") and data.get("insights"):
+                # Display each scenario
+                for insight in data["insights"]:
+                    scenario_icon = {1: "📊", 2: "🎯", 3: "⚖️"}.get(insight["scenario_id"], "💡")
+                    with st.expander(f"{scenario_icon} {insight['scenario_name']} (Gemini 2.5 Flash)", expanded=False):
+                        st.markdown(f"**Question:** {insight['question']}")
+                        st.markdown("---")
+                        st.markdown(insight["explanation"])
+                        st.caption(f"Source: `{insight['context_table']}` | Generated: {insight['generated_at'][:10]}")
+                st.success(f"✅ {data['total']} validated Gemini scenarios loaded from Delta Lake (zero API calls)")
+            else:
+                st.warning("⚠️ No Gemini insights found in cache.")
+        else:
+            st.error(f"Failed to fetch Gemini insights: HTTP {response.status_code}")
+    except Exception as e:
+        st.error(f"Error loading Gemini insights: {e}")
+        st.info("💡 Gemini insights require the notebook scenario cells (71, 72, 74) to be run first.")
+    
+    st.markdown("---")
+    
+    # =========================================================================
+    # GROQ LLAMA INSIGHTS (REAL-TIME INTERACTIVE - EVALUATOR FAVORITE)
+    # =========================================================================
+    st.markdown("#### ⚡ Groq LLaMA 3.3 70B: Real-Time Interactive Insights")
+    st.caption("Live AI analysis based on current forecast data")
+    
     from utils.ai_insights_groq import get_forecast_insight, get_stock_insight, get_risk_insight
     
     # Insight 1: Forecast Analysis
