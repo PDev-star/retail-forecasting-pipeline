@@ -166,10 +166,13 @@ async def get_ai_insights(scenario_id: int = None, api_key: str = Header(..., al
         result = response.json()
         
         # DEBUG: Log the actual response
-        print(f"[DEBUG] SQL query status: {result.get('status', {}).get('state')}")
-        print(f"[DEBUG] Has data_array: {'data_array' in result.get('result', {})}")
-        if 'result' in result and 'data_array' in result['result']:
-            print(f"[DEBUG] Row count: {len(result['result']['data_array'])}")
+        query_status = result.get('status', {}).get('state') if result.get('status') else 'UNKNOWN'
+        print(f"[DEBUG] SQL query status: {query_status}")
+        
+        result_data = result.get('result') or {}
+        print(f"[DEBUG] Has data_array: {'data_array' in result_data}")
+        if 'data_array' in result_data:
+            print(f"[DEBUG] Row count: {len(result_data['data_array'])}")
         
         # Check if query succeeded
         if result.get("status", {}).get("state") != "SUCCEEDED":
