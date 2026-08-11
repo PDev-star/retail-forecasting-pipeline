@@ -171,21 +171,21 @@ def test_ai_insights_success(mock_post):
     mock_response.status_code = 200
     mock_response.json.return_value = {
         "status": {"state": "SUCCEEDED"},
+        "manifest": {
+            "schema": {
+                "columns": [
+                    {"name": "scenario_id"},
+                    {"name": "scenario_name"},
+                    {"name": "ai_provider"},
+                    {"name": "prompt_type"},
+                    {"name": "question"},
+                    {"name": "context_table"},
+                    {"name": "explanation"},
+                    {"name": "generated_at"},
+                ]
+            }
+        },
         "result": {
-            "manifest": {
-                "schema": {
-                    "columns": [
-                        {"name": "scenario_id"},
-                        {"name": "scenario_name"},
-                        {"name": "ai_provider"},
-                        {"name": "prompt_type"},
-                        {"name": "question"},
-                        {"name": "context_table"},
-                        {"name": "explanation"},
-                        {"name": "generated_at"},
-                    ]
-                }
-            },
             "data_array": [
                 [
                     1,
@@ -249,21 +249,21 @@ def test_ai_insights_filter_by_scenario(mock_post):
     mock_response.status_code = 200
     mock_response.json.return_value = {
         "status": {"state": "SUCCEEDED"},
+        "manifest": {
+            "schema": {
+                "columns": [
+                    {"name": "scenario_id"},
+                    {"name": "scenario_name"},
+                    {"name": "ai_provider"},
+                    {"name": "prompt_type"},
+                    {"name": "question"},
+                    {"name": "context_table"},
+                    {"name": "explanation"},
+                    {"name": "generated_at"},
+                ]
+            }
+        },
         "result": {
-            "manifest": {
-                "schema": {
-                    "columns": [
-                        {"name": "scenario_id"},
-                        {"name": "scenario_name"},
-                        {"name": "ai_provider"},
-                        {"name": "prompt_type"},
-                        {"name": "question"},
-                        {"name": "context_table"},
-                        {"name": "explanation"},
-                        {"name": "generated_at"},
-                    ]
-                }
-            },
             "data_array": [
                 [
                     2,
@@ -296,21 +296,21 @@ def test_ai_insights_empty_cache(mock_post):
     mock_response.status_code = 200
     mock_response.json.return_value = {
         "status": {"state": "SUCCEEDED"},
+        "manifest": {
+            "schema": {
+                "columns": [
+                    {"name": "scenario_id"},
+                    {"name": "scenario_name"},
+                    {"name": "ai_provider"},
+                    {"name": "prompt_type"},
+                    {"name": "question"},
+                    {"name": "context_table"},
+                    {"name": "explanation"},
+                    {"name": "generated_at"},
+                ]
+            }
+        },
         "result": {
-            "manifest": {
-                "schema": {
-                    "columns": [
-                        {"name": "scenario_id"},
-                        {"name": "scenario_name"},
-                        {"name": "ai_provider"},
-                        {"name": "prompt_type"},
-                        {"name": "question"},
-                        {"name": "context_table"},
-                        {"name": "explanation"},
-                        {"name": "generated_at"},
-                    ]
-                }
-            },
             "data_array": [],
         },
     }
