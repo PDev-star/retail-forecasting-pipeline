@@ -17,7 +17,7 @@ on:
   workflow_run:
     workflows: ["FastAPI Gateway Tests", "Streamlit App Tests"]
     types: [completed]
-    branches: [gitconnectiontest]  # Only runs for gitconnectiontest branch updates (merges)
+    branches: [GitConnectionTest]  # Only runs for GitConnectionTest branch updates (merges)
 
 jobs:
   # ============================================================
