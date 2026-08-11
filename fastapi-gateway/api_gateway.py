@@ -171,14 +171,16 @@ async def get_ai_insights(scenario_id: int = None, api_key: str = Header(..., al
                 detail="Query execution failed"
             )
         
-        # Parse results
+        # Parse results (handle empty results gracefully)
         insights = []
         if "result" in result and "data_array" in result["result"]:
-            columns = [col["name"] for col in result["result"]["manifest"]["schema"]["columns"]]
-            
-            for row in result["result"]["data_array"]:
-                insight = dict(zip(columns, row))
-                insights.append(insight)
+            # Check if manifest exists (it won't if table doesn't exist or is empty)
+            if "manifest" in result["result"] and "schema" in result["result"]["manifest"]:
+                columns = [col["name"] for col in result["result"]["manifest"]["schema"]["columns"]]
+                
+                for row in result["result"]["data_array"]:
+                    insight = dict(zip(columns, row))
+                    insights.append(insight)
         
         # Return results (with helpful message if table doesn't exist)
         if len(insights) == 0:
