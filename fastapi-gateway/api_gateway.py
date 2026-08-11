@@ -1,6 +1,6 @@
 # api_gateway.py - FastAPI Gateway for Databricks Model Serving
 # Deploy on Render.com (FREE!)
-# Updated: 2026-08-11 - Trigger deployment workflow
+# Updated: 2026-08-11 - Trigger deployment workflow (fixed branch case)
 
 import os
 from datetime import datetime
