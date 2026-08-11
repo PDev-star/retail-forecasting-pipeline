@@ -368,8 +368,11 @@ def test_ai_insights_malformed_response(mock_post):
     """Test /ai-insights handles malformed database responses"""
     mock_response = MagicMock()
     mock_response.status_code = 200
-    # Missing 'result' key - will cause KeyError
-    mock_response.json.return_value = {"status": {"state": "SUCCEEDED"}}
+    # Has 'result' but missing nested 'manifest' key - will cause KeyError when accessing schema
+    mock_response.json.return_value = {
+        "status": {"state": "SUCCEEDED"},
+        "result": {"data_array": []}  # Missing 'manifest' key
+    }
     mock_post.return_value = mock_response
 
     response = client.get("/ai-insights", headers={"X-API-Key": VALID_TEST_KEY})

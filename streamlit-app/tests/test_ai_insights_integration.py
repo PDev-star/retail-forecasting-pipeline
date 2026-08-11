@@ -294,7 +294,7 @@ def test_render_insights_tab_gemini_section_displays():
     }
     
     with patch('components.tabs.st', mock_st_local):
-        with patch('components.tabs.requests.get', return_value=mock_response):
+        with patch('requests.get', return_value=mock_response):
             with patch('utils.ai_insights_groq.get_forecast_insight', return_value="Groq insight"):
                 with patch('utils.ai_insights_groq.get_stock_insight', return_value="Groq insight"):
                     with patch('utils.ai_insights_groq.get_risk_insight', return_value="Groq insight"):
@@ -324,7 +324,7 @@ def test_render_insights_tab_gemini_api_failure_graceful():
     
     # Simulate FastAPI connection error
     with patch('components.tabs.st', mock_st_local):
-        with patch('components.tabs.requests.get', side_effect=Exception("Connection refused")):
+        with patch('requests.get', side_effect=Exception("Connection refused")):
             with patch('utils.ai_insights_groq.get_forecast_insight', return_value="Groq insight"):
                 with patch('utils.ai_insights_groq.get_stock_insight', return_value="Groq insight"):
                     with patch('utils.ai_insights_groq.get_risk_insight', return_value="Groq insight"):
@@ -356,7 +356,7 @@ def test_render_insights_tab_gemini_empty_cache():
     }
     
     with patch('components.tabs.st', mock_st_local):
-        with patch('components.tabs.requests.get', return_value=mock_response):
+        with patch('requests.get', return_value=mock_response):
             with patch('utils.ai_insights_groq.get_forecast_insight', return_value="Groq insight"):
                 with patch('utils.ai_insights_groq.get_stock_insight', return_value="Groq insight"):
                     with patch('utils.ai_insights_groq.get_risk_insight', return_value="Groq insight"):
@@ -393,7 +393,7 @@ def test_render_insights_tab_dual_ai_architecture():
     }
     
     with patch('components.tabs.st', mock_st_local):
-        with patch('components.tabs.requests.get', return_value=mock_response):
+        with patch('requests.get', return_value=mock_response):
             with patch('utils.ai_insights_groq.get_forecast_insight', return_value="Groq forecast"):
                 with patch('utils.ai_insights_groq.get_stock_insight', return_value="Groq stock"):
                     with patch('utils.ai_insights_groq.get_risk_insight', return_value="Groq risk"):
@@ -422,7 +422,7 @@ def test_render_insights_tab_gemini_http_error():
     mock_response.status_code = 500
     
     with patch('components.tabs.st', mock_st_local):
-        with patch('components.tabs.requests.get', return_value=mock_response):
+        with patch('requests.get', return_value=mock_response):
             with patch('utils.ai_insights_groq.get_forecast_insight', return_value="Groq insight"):
                 with patch('utils.ai_insights_groq.get_stock_insight', return_value="Groq insight"):
                     with patch('utils.ai_insights_groq.get_risk_insight', return_value="Groq insight"):
