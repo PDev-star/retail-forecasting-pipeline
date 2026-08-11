@@ -365,7 +365,7 @@ def test_ai_insights_connection_timeout(mock_post):
 
 @patch("api_gateway.requests.post")
 def test_ai_insights_malformed_response(mock_post):
-    """Test /ai-insights handles malformed database responses"""
+    """Test /ai-insights gracefully handles missing manifest (table doesn't exist or is empty)"""
     mock_response = MagicMock()
     mock_response.status_code = 200
     # Has 'result' but missing nested 'manifest' key - will cause KeyError when accessing schema
@@ -377,5 +377,11 @@ def test_ai_insights_malformed_response(mock_post):
 
     response = client.get("/ai-insights", headers={"X-API-Key": VALID_TEST_KEY})
 
-    assert response.status_code == 500
-    assert "parsing error" in response.json()["detail"].lower()
+    # Should gracefully return 200 with empty insights and helpful message
+    assert response.status_code == 200
+    data = response.json()
+    assert data["success"] is True
+    assert data["total"] == 0
+    assert data["insights"] == []
+    assert "message" in data
+    assert "Gemini notebook cells" in data["message"]
