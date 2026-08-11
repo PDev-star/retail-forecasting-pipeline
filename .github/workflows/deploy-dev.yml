@@ -1,4 +1,4 @@
-name: Deploy to Dev (CODE)
+name: Deploy to Dev
 
 # This workflow runs ONLY when code is merged to gitconnectiontest (dev branch)
 # It waits for BOTH test workflows to complete successfully
