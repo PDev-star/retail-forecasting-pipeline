@@ -100,28 +100,15 @@ def render_stock_tab(forecast, lead_time_days, calculate_stock_recommendation):
     render_inventory_chart(forecast, dates, recommended_stock, reorder_point, safety_stock, lead_time_days)
 
 
-def render_insights_tab(forecast, product, scenario_desc, lead_time_days, calculate_stock_recommendation):
-    """Render the AI insights tab with DUAL AI: Gemini (cached) + Groq (real-time Q&A)."""
-    st.markdown("### 💡 AI-Powered Insights")
-    st.markdown("*Dual-AI approach: Gemini 2.5 Flash (RFP-validated explanations) + Groq LLaMA 3.3 70B (interactive Q&A)*")
+def render_gemini_tab():
+    """Render Gemini 2.5 Flash static scenario explanations (pre-generated, cached)."""
+    st.markdown("### 🔬 Gemini 2.5 Flash: Business Scenario Analysis")
+    st.markdown("*Pre-generated strategic insights from notebook pipeline, validated & cached in Delta Lake*")
+    st.info("💡 **Why separate tab?** These are high-level business explanations that apply across all products, unlike the real-time product-specific insights in the AI Insights tab.")
     st.markdown("---")
-
-    # Calculate metrics
-    recommended_stock = calculate_stock_recommendation(forecast, lead_time_days)
-    safety_stock = int(recommended_stock * 0.2)
-    reorder_point = int(sum(forecast[:lead_time_days]))
-    avg_demand = sum(forecast) / len(forecast)
-    trend = "increasing" if forecast[-1] > forecast[0] else "decreasing"
-    volatility = max(forecast) - min(forecast)
     
-    # =========================================================================
-    # GEMINI 2.5 FLASH EXPLANATIONS (FROM DELTA LAKE - RFP COMPLIANCE)
-    # =========================================================================
     import requests
     from utils.config import FASTAPI_URL, API_KEY
-    
-    st.markdown("#### 🔬 Gemini 2.5 Flash: RFP-Validated Scenario Explanations")
-    st.caption("Pre-generated explanations from notebook analysis, cached in Delta Lake")
     
     try:
         # Fetch Gemini insights from FastAPI
@@ -137,12 +124,12 @@ def render_insights_tab(forecast, product, scenario_desc, lead_time_days, calcul
                 # Display each scenario
                 for insight in data["insights"]:
                     scenario_icon = {1: "📊", 2: "🎯", 3: "⚖️"}.get(insight["scenario_id"], "💡")
-                    with st.expander(f"{scenario_icon} {insight['scenario_name']} (Gemini 2.5 Flash)", expanded=False):
+                    with st.expander(f"{scenario_icon} {insight['scenario_name']}", expanded=True):
                         st.markdown(f"**Question:** {insight['question']}")
                         st.markdown("---")
                         st.markdown(insight["explanation"])
                         st.caption(f"Source: `{insight['context_table']}` | Generated: {insight['generated_at'][:10]}")
-                st.success(f"✅ {data['total']} validated Gemini scenarios loaded from Delta Lake (zero API calls)")
+                st.success(f"✅ {data['total']} validated Gemini scenarios loaded from Delta Lake (zero inference API calls)")
             else:
                 st.warning("⚠️ No Gemini insights found in cache.")
         else:
@@ -150,14 +137,25 @@ def render_insights_tab(forecast, product, scenario_desc, lead_time_days, calcul
     except Exception as e:
         st.error(f"Error loading Gemini insights: {e}")
         st.info("💡 Gemini insights require the notebook scenario cells (71, 72, 74) to be run first.")
-    
+
+
+def render_insights_tab(forecast, product, scenario_desc, lead_time_days, calculate_stock_recommendation):
+    """Render real-time AI insights tab (Groq LLaMA - product-specific analysis)."""
+    st.markdown("### 💡 AI-Powered Real-Time Insights")
+    st.markdown("*Groq LLaMA 3.3 70B generates live analysis based on YOUR current product & forecast data*")
     st.markdown("---")
+
+    # Calculate metrics
+    recommended_stock = calculate_stock_recommendation(forecast, lead_time_days)
+    safety_stock = int(recommended_stock * 0.2)
+    reorder_point = int(sum(forecast[:lead_time_days]))
+    avg_demand = sum(forecast) / len(forecast)
+    trend = "increasing" if forecast[-1] > forecast[0] else "decreasing"
+    volatility = max(forecast) - min(forecast)
     
     # =========================================================================
-    # GROQ LLAMA INSIGHTS (REAL-TIME INTERACTIVE - EVALUATOR FAVORITE)
+    # GROQ LLAMA INSIGHTS (REAL-TIME INTERACTIVE - PRODUCT-SPECIFIC)
     # =========================================================================
-    st.markdown("#### ⚡ Groq LLaMA 3.3 70B: Real-Time Interactive Insights")
-    st.caption("Live AI analysis based on current forecast data")
     
     from utils.ai_insights_groq import get_forecast_insight, get_stock_insight, get_risk_insight
     

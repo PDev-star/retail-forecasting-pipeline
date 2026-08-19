@@ -79,6 +79,7 @@ from components.tabs import (
     render_data_tab,
     render_stock_tab,
     render_insights_tab,
+    render_gemini_tab,
     render_welcome_screen,
 )
 
@@ -184,7 +185,7 @@ if _should_run_ui():
         lead_time_days = st.session_state["lead_time_days"]
     
         # Tab navigation using radio (with fixed state management)
-        tab_options = ["📊 Forecast Chart", "📋 Data Table", "🎯 Stock Recommendations", "💡 AI Insights"]
+        tab_options = ["📊 Forecast Chart", "📋 Data Table", "🎯 Stock Recommendations", "💡 AI Insights", "🔬 Gemini Insights"]
         
         # Get current tab index (default to 0 if not found)
         try:
@@ -233,6 +234,9 @@ if _should_run_ui():
             
             elif st.session_state.active_tab == "💡 AI Insights":
                 render_insights_tab(forecast, product, scenario_desc, lead_time_days, calculate_stock_recommendation)
+            
+            elif st.session_state.active_tab == "🔬 Gemini Insights":
+                render_gemini_tab()
     
     else:
         # Show welcome screen
