@@ -1,183 +1,187 @@
-# test_sidebar_comprehensive.py - Comprehensive coverage for components/sidebar.py
 """
-Tests for sidebar.py to achieve 80%+ coverage.
-Covers product selection, scenario controls, and all UI interactions.
+Comprehensive tests for components/sidebar.py
+Covers all sidebar functionality: product selection, horizon, scenarios, multipliers
 """
-import os
-import sys
-from unittest.mock import MagicMock, patch
-import pytest
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+import pytest
+from unittest.mock import MagicMock, patch
+from components.sidebar import render_sidebar
+
+
+@pytest.fixture
+def mock_products():
+    """Sample PRODUCTS dict matching the app's structure"""
+    return {
+        "Cat1": {
+            "name": "Test Product 1",
+            "sku": "SKU001",
+            "product_id": "Cat1",
+            "color": "#1f77b4"
+        },
+        "Cat2": {
+            "name": "Test Product 2",
+            "sku": "SKU002",
+            "product_id": "Cat2",
+            "color": "#ff7f0e"
+        }
+    }
+
 
 @pytest.fixture
 def mock_streamlit():
-    """Mock streamlit with all sidebar methods"""
-    mock_st = MagicMock()
+    """Mock streamlit sidebar with default return values"""
+    mock_sidebar = MagicMock()
+    mock_sidebar.title = MagicMock()
+    mock_sidebar.markdown = MagicMock()
+    mock_sidebar.caption = MagicMock()
+    mock_sidebar.selectbox = MagicMock(side_effect=["Test Product 1", "Normal"])
+    mock_sidebar.slider = MagicMock(return_value=30)
     
-    # Sidebar methods
-    mock_st.sidebar.markdown = MagicMock()
-    mock_st.sidebar.selectbox = MagicMock(return_value=None)
-    mock_st.sidebar.number_input = MagicMock(return_value=30)
-    mock_st.sidebar.radio = MagicMock(return_value="Base Case")
-    mock_st.sidebar.slider = MagicMock(return_value=1.0)
-    mock_st.sidebar.divider = MagicMock()
-    mock_st.sidebar.info = MagicMock()
-    
-    with patch.dict('sys.modules', {'streamlit': mock_st}):
+    with patch('components.sidebar.st') as mock_st:
+        mock_st.sidebar = mock_sidebar
         yield mock_st
 
 
-def test_render_sidebar_returns_all_values(mock_streamlit):
-    """Test sidebar returns product, horizon, scenario, multiplier"""
-    from components.sidebar import render_sidebar
+def test_render_sidebar_returns_dict(mock_streamlit, mock_products):
+    """Test that render_sidebar returns a dict with expected keys"""
+    result = render_sidebar(mock_products)
     
-    # Mock user selections
-    mock_streamlit.sidebar.selectbox.return_value = {
-        'name': 'Widget', 'sku': 'WDG001', 'product_id': 'widget-1'
-    }
-    mock_streamlit.sidebar.number_input.return_value = 45
-    mock_streamlit.sidebar.radio.return_value = "Best Case"
-    mock_streamlit.sidebar.slider.return_value = 1.2
-    
-    with patch('components.sidebar.st', mock_streamlit):
-        product, horizon, scenario, multiplier = render_sidebar()
-    
-    # Verify all return values
-    assert product == {'name': 'Widget', 'sku': 'WDG001', 'product_id': 'widget-1'}
-    assert horizon == 45
-    assert scenario == "Best Case"
-    assert multiplier == 1.2
+    assert isinstance(result, dict)
+    assert "selected_category" in result
+    assert "product" in result
+    assert "horizon" in result
+    assert "scenario_type" in result
+    assert "adjustment_factor" in result
+    assert "scenario_desc" in result
+    assert "lead_time_days" in result
 
 
-def test_render_sidebar_no_product_selected(mock_streamlit):
-    """Test sidebar when no product is selected"""
-    from components.sidebar import render_sidebar
+def test_render_sidebar_normal_scenario(mock_streamlit, mock_products):
+    """Test Normal scenario returns correct values"""
+    result = render_sidebar(mock_products)
     
-    # No product selected
-    mock_streamlit.sidebar.selectbox.return_value = None
-    
-    with patch('components.sidebar.st', mock_streamlit):
-        product, horizon, scenario, multiplier = render_sidebar()
-    
-    # Verify None returned for product
-    assert product is None
+    assert result["scenario_type"] == "Normal"
+    assert result["adjustment_factor"] == 1.0
+    assert "business-as-usual" in result["scenario_desc"]
+    assert result["lead_time_days"] == 14
 
 
-def test_render_sidebar_creates_ui_elements(mock_streamlit):
-    """Test sidebar creates all expected UI elements"""
-    from components.sidebar import render_sidebar
+def test_render_sidebar_promotion_scenario(mock_products):
+    """Test Promotion scenario returns +30% adjustment"""
+    mock_sidebar = MagicMock()
+    mock_sidebar.selectbox = MagicMock(side_effect=["Test Product 1", "Promotion (+30%)"])
+    mock_sidebar.slider = MagicMock(return_value=30)
     
-    with patch('components.sidebar.st', mock_streamlit):
-        with patch('components.sidebar.PRODUCTS', [{'name': 'Test', 'sku': 'T1', 'product_id': 'p1'}]):
-            render_sidebar()
+    with patch('components.sidebar.st') as mock_st:
+        mock_st.sidebar = mock_sidebar
+        result = render_sidebar(mock_products)
     
-    # Verify UI methods were called
+    assert result["scenario_type"] == "Promotion (+30%)"
+    assert result["adjustment_factor"] == 1.3
+    assert "30%" in result["scenario_desc"]
+
+
+def test_render_sidebar_black_friday_scenario(mock_products):
+    """Test Black Friday scenario returns +80% adjustment"""
+    mock_sidebar = MagicMock()
+    mock_sidebar.selectbox = MagicMock(side_effect=["Test Product 1", "Black Friday Sale (+80%)"])
+    mock_sidebar.slider = MagicMock(return_value=30)
+    
+    with patch('components.sidebar.st') as mock_st:
+        mock_st.sidebar = mock_sidebar
+        result = render_sidebar(mock_products)
+    
+    assert result["scenario_type"] == "Black Friday Sale (+80%)"
+    assert result["adjustment_factor"] == 1.8
+    assert "80%" in result["scenario_desc"]
+
+
+def test_render_sidebar_competitor_scenario(mock_products):
+    """Test Competitor Entry scenario returns -20% adjustment"""
+    mock_sidebar = MagicMock()
+    mock_sidebar.selectbox = MagicMock(side_effect=["Test Product 1", "Competitor Entry (-20%)"])
+    mock_sidebar.slider = MagicMock(return_value=30)
+    
+    with patch('components.sidebar.st') as mock_st:
+        mock_st.sidebar = mock_sidebar
+        result = render_sidebar(mock_products)
+    
+    assert result["scenario_type"] == "Competitor Entry (-20%)"
+    assert result["adjustment_factor"] == 0.8
+    assert "20%" in result["scenario_desc"]
+
+
+def test_render_sidebar_horizon_values(mock_products):
+    """Test horizon slider returns correct values"""
+    mock_sidebar = MagicMock()
+    mock_sidebar.selectbox = MagicMock(side_effect=["Test Product 1", "Normal"])
+    mock_sidebar.slider = MagicMock(return_value=60)
+    
+    with patch('components.sidebar.st') as mock_st:
+        mock_st.sidebar = mock_sidebar
+        result = render_sidebar(mock_products)
+    
+    assert result["horizon"] == 60
+
+
+def test_render_sidebar_product_selection(mock_products):
+    """Test product selection returns correct product"""
+    mock_sidebar = MagicMock()
+    mock_sidebar.selectbox = MagicMock(side_effect=["Test Product 2", "Normal"])
+    mock_sidebar.slider = MagicMock(return_value=30)
+    
+    with patch('components.sidebar.st') as mock_st:
+        mock_st.sidebar = mock_sidebar
+        result = render_sidebar(mock_products)
+    
+    assert result["selected_category"] == "Cat2"
+    assert result["product"]["name"] == "Test Product 2"
+    assert result["product"]["sku"] == "SKU002"
+
+
+def test_render_sidebar_creates_ui_elements(mock_streamlit, mock_products):
+    """Test that UI elements are created"""
+    result = render_sidebar(mock_products)
+    
+    # Verify sidebar methods were called
+    assert mock_streamlit.sidebar.title.called
     assert mock_streamlit.sidebar.markdown.called
     assert mock_streamlit.sidebar.selectbox.called
-    assert mock_streamlit.sidebar.number_input.called
-    assert mock_streamlit.sidebar.radio.called
     assert mock_streamlit.sidebar.slider.called
 
 
-def test_render_sidebar_horizon_range(mock_streamlit):
-    """Test horizon input has correct range"""
-    from components.sidebar import render_sidebar
+def test_render_sidebar_supply_disruption_slider(mock_products):
+    """Test Supply Disruption scenario with custom lead time slider"""
+    mock_sidebar = MagicMock()
+    mock_sidebar.selectbox = MagicMock(side_effect=["Test Product 1", "Supply Disruption"])
+    mock_sidebar.slider = MagicMock(side_effect=[30, 21])  # horizon, then lead_time
     
-    with patch('components.sidebar.st', mock_streamlit):
-        with patch('components.sidebar.PRODUCTS', [{'name': 'Test', 'sku': 'T1', 'product_id': 'p1'}]):
-            render_sidebar()
+    with patch('components.sidebar.st') as mock_st:
+        mock_st.sidebar = mock_sidebar
+        result = render_sidebar(mock_products)
     
-    # Check number_input was called for horizon
-    assert mock_streamlit.sidebar.number_input.called
-    call_kwargs = mock_streamlit.sidebar.number_input.call_args[1]
-    
-    # Verify range constraints exist
-    assert 'min_value' in call_kwargs
-    assert 'max_value' in call_kwargs
+    assert result["scenario_type"] == "Supply Disruption"
+    assert result["adjustment_factor"] == 1.0
+    assert result["lead_time_days"] == 21
 
 
-def test_render_sidebar_scenario_options(mock_streamlit):
-    """Test scenario radio has correct options"""
-    from components.sidebar import render_sidebar
-    
-    with patch('components.sidebar.st', mock_streamlit):
-        with patch('components.sidebar.PRODUCTS', [{'name': 'Test', 'sku': 'T1', 'product_id': 'p1'}]):
-            render_sidebar()
-    
-    # Check radio was called for scenarios
-    assert mock_streamlit.sidebar.radio.called
-    call_args = mock_streamlit.sidebar.radio.call_args[0]
-    
-    # Verify scenario options
-    assert len(call_args) >= 2  # At least label and options
-
-
-def test_render_sidebar_multiplier_slider(mock_streamlit):
-    """Test multiplier slider configuration"""
-    from components.sidebar import render_sidebar
-    
-    with patch('components.sidebar.st', mock_streamlit):
-        with patch('components.sidebar.PRODUCTS', [{'name': 'Test', 'sku': 'T1', 'product_id': 'p1'}]):
-            render_sidebar()
-    
-    # Check slider was called
-    assert mock_streamlit.sidebar.slider.called
-    call_kwargs = mock_streamlit.sidebar.slider.call_args[1]
-    
-    # Verify slider has min/max values
-    assert 'min_value' in call_kwargs
-    assert 'max_value' in call_kwargs
-
-
-def test_render_sidebar_with_empty_products(mock_streamlit):
-    """Test sidebar handles empty product list"""
-    from components.sidebar import render_sidebar
-    
-    with patch('components.sidebar.st', mock_streamlit):
-        with patch('components.sidebar.PRODUCTS', []):
-            try:
-                product, horizon, scenario, multiplier = render_sidebar()
-                success = True
-            except:
-                success = False
-    
-    # Should not crash
-    assert success
-
-
-def test_render_sidebar_with_multiple_products(mock_streamlit):
-    """Test sidebar with multiple products in dropdown"""
-    from components.sidebar import render_sidebar
-    
-    products = [
-        {'name': 'Product A', 'sku': 'PA001', 'product_id': 'pa1'},
-        {'name': 'Product B', 'sku': 'PB001', 'product_id': 'pb1'},
-        {'name': 'Product C', 'sku': 'PC001', 'product_id': 'pc1'}
+def test_render_sidebar_seasonal_scenarios(mock_products):
+    """Test all seasonal scenarios have correct adjustments"""
+    scenarios = [
+        ("Seasonal Peak (+50%)", 1.5),
+        ("Holiday Season (+70%)", 1.7),
+        ("End of Season Clearance (+40%)", 1.4),
     ]
     
-    with patch('components.sidebar.st', mock_streamlit):
-        with patch('components.sidebar.PRODUCTS', products):
-            render_sidebar()
-    
-    # Verify selectbox was called
-    assert mock_streamlit.sidebar.selectbox.called
+    for scenario_name, expected_factor in scenarios:
+        mock_sidebar = MagicMock()
+        mock_sidebar.selectbox = MagicMock(side_effect=["Test Product 1", scenario_name])
+        mock_sidebar.slider = MagicMock(return_value=30)
+        
+        with patch('components.sidebar.st') as mock_st:
+            mock_st.sidebar = mock_sidebar
+            result = render_sidebar(mock_products)
+        
+        assert result["adjustment_factor"] == expected_factor
 
 
-def test_render_sidebar_default_values(mock_streamlit):
-    """Test sidebar returns sensible defaults"""
-    from components.sidebar import render_sidebar
-    
-    # No mocking - use default returns
-    mock_streamlit.sidebar.selectbox.return_value = None
-    mock_streamlit.sidebar.number_input.return_value = 30
-    mock_streamlit.sidebar.radio.return_value = "Base Case"
-    mock_streamlit.sidebar.slider.return_value = 1.0
-    
-    with patch('components.sidebar.st', mock_streamlit):
-        product, horizon, scenario, multiplier = render_sidebar()
-    
-    # Check defaults are reasonable
-    assert horizon == 30
-    assert scenario == "Base Case"
-    assert multiplier == 1.0
