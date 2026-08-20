@@ -252,183 +252,28 @@ def test_render_insights_tab_custom_qna_button_not_clicked():
                         mock_custom.assert_not_called()
 
 
-def test_render_insights_tab_gemini_section_displays():
-    """Test that Gemini 2.5 Flash section renders with cached insights."""
+def test_render_insights_tab_groq_only():
+    """Test that insights tab now shows only Groq (Gemini moved to separate tab)."""
     forecast = [100, 110, 120]
     product = {'name': 'Test', 'sku': 'T1', 'product_id': 'p1'}
     scenario_desc = 'Test'
     lead_time_days = 5
     
     mock_st_local = MockStreamlit()
-    mock_response = MagicMock()
-    mock_response.status_code = 200
-    mock_response.json.return_value = {
-        "success": True,
-        "total": 3,
-        "insights": [
-            {
-                "scenario_id": 1,
-                "scenario_name": "Forecast Interpretation",
-                "question": "What do these numbers mean?",
-                "explanation": "Gemini explanation 1",
-                "context_table": "workspace.default.forecasts",
-                "generated_at": "2026-08-10T12:00:00"
-            },
-            {
-                "scenario_id": 2,
-                "scenario_name": "Safety Stock Analysis",
-                "question": "How much buffer?",
-                "explanation": "Gemini explanation 2",
-                "context_table": "workspace.default.stock_levels",
-                "generated_at": "2026-08-10T12:00:00"
-            },
-            {
-                "scenario_id": 3,
-                "scenario_name": "What-If Scenarios",
-                "question": "What if we change service level?",
-                "explanation": "Gemini explanation 3",
-                "context_table": "workspace.default.scenarios",
-                "generated_at": "2026-08-10T12:00:00"
-            }
-        ]
-    }
     
     with patch('components.tabs.st', mock_st_local):
-        with patch('requests.get', return_value=mock_response):
-            with patch('utils.ai_insights_groq.get_forecast_insight', return_value="Groq insight"):
-                with patch('utils.ai_insights_groq.get_stock_insight', return_value="Groq insight"):
-                    with patch('utils.ai_insights_groq.get_risk_insight', return_value="Groq insight"):
-                        render_insights_tab(forecast, product, scenario_desc, lead_time_days, calculate_stock_recommendation)
+        with patch('utils.ai_insights_groq.get_forecast_insight', return_value="Groq insight"):
+            with patch('utils.ai_insights_groq.get_stock_insight', return_value="Groq insight"):
+                with patch('utils.ai_insights_groq.get_risk_insight', return_value="Groq insight"):
+                    render_insights_tab(forecast, product, scenario_desc, lead_time_days, calculate_stock_recommendation)
     
-    # Verify Gemini section header was displayed
+    # Verify only Groq section is shown (no Gemini)
     markdown_texts = ' '.join(mock_st_local.markdown_calls)
-    assert 'Gemini 2.5 Flash' in markdown_texts
-    assert 'RFP-Validated' in markdown_texts
-    
-    # Verify caption about caching was shown
-    write_texts = ' '.join(str(call) for call in mock_st_local.write_calls)
-    assert 'Delta Lake' in write_texts or 'cache' in write_texts.lower()
-    
-    # Verify all 3 Gemini scenarios shown as expanders (plus 3 Groq + 1 technical = 7 total)
-    assert len(mock_st_local.expander_calls) >= 6
-
-
-def test_render_insights_tab_gemini_api_failure_graceful():
-    """Test graceful handling when FastAPI is unavailable."""
-    forecast = [100, 110, 120]
-    product = {'name': 'Test', 'sku': 'T1', 'product_id': 'p1'}
-    scenario_desc = 'Test'
-    lead_time_days = 5
-    
-    mock_st_local = MockStreamlit()
-    
-    # Simulate FastAPI connection error
-    with patch('components.tabs.st', mock_st_local):
-        with patch('requests.get', side_effect=Exception("Connection refused")):
-            with patch('utils.ai_insights_groq.get_forecast_insight', return_value="Groq insight"):
-                with patch('utils.ai_insights_groq.get_stock_insight', return_value="Groq insight"):
-                    with patch('utils.ai_insights_groq.get_risk_insight', return_value="Groq insight"):
-                        # Should not crash
-                        render_insights_tab(forecast, product, scenario_desc, lead_time_days, calculate_stock_recommendation)
-    
-    # Verify error was displayed gracefully
-    write_texts = ' '.join(str(call) for call in mock_st_local.write_calls)
-    assert 'error' in write_texts.lower() or 'Error' in write_texts
-    
-    # Verify Groq section still works (fallback)
-    assert len(mock_st_local.expander_calls) >= 3  # At least Groq insights
-
-
-def test_render_insights_tab_gemini_empty_cache():
-    """Test behavior when Delta Lake cache is empty."""
-    forecast = [100, 110, 120]
-    product = {'name': 'Test', 'sku': 'T1', 'product_id': 'p1'}
-    scenario_desc = 'Test'
-    lead_time_days = 5
-    
-    mock_st_local = MockStreamlit()
-    mock_response = MagicMock()
-    mock_response.status_code = 200
-    mock_response.json.return_value = {
-        "success": True,
-        "total": 0,
-        "insights": []
-    }
-    
-    with patch('components.tabs.st', mock_st_local):
-        with patch('requests.get', return_value=mock_response):
-            with patch('utils.ai_insights_groq.get_forecast_insight', return_value="Groq insight"):
-                with patch('utils.ai_insights_groq.get_stock_insight', return_value="Groq insight"):
-                    with patch('utils.ai_insights_groq.get_risk_insight', return_value="Groq insight"):
-                        render_insights_tab(forecast, product, scenario_desc, lead_time_days, calculate_stock_recommendation)
-    
-    # Verify warning about empty cache
-    write_texts = ' '.join(str(call) for call in mock_st_local.write_calls)
-    assert 'No Gemini insights' in write_texts or 'not found' in write_texts.lower()
-
-
-def test_render_insights_tab_dual_ai_architecture():
-    """Test that both Gemini (cached) and Groq (real-time) sections exist."""
-    forecast = [100, 110, 120]
-    product = {'name': 'Test', 'sku': 'T1', 'product_id': 'p1'}
-    scenario_desc = 'Test'
-    lead_time_days = 5
-    
-    mock_st_local = MockStreamlit()
-    mock_response = MagicMock()
-    mock_response.status_code = 200
-    mock_response.json.return_value = {
-        "success": True,
-        "total": 1,
-        "insights": [
-            {
-                "scenario_id": 1,
-                "scenario_name": "Test Scenario",
-                "question": "Test?",
-                "explanation": "Gemini answer",
-                "context_table": "test.table",
-                "generated_at": "2026-08-10T12:00:00"
-            }
-        ]
-    }
-    
-    with patch('components.tabs.st', mock_st_local):
-        with patch('requests.get', return_value=mock_response):
-            with patch('utils.ai_insights_groq.get_forecast_insight', return_value="Groq forecast"):
-                with patch('utils.ai_insights_groq.get_stock_insight', return_value="Groq stock"):
-                    with patch('utils.ai_insights_groq.get_risk_insight', return_value="Groq risk"):
-                        render_insights_tab(forecast, product, scenario_desc, lead_time_days, calculate_stock_recommendation)
-    
-    markdown_texts = ' '.join(mock_st_local.markdown_calls)
-    
-    # Verify both AI sections present
-    assert 'Gemini 2.5 Flash' in markdown_texts
     assert 'Groq' in markdown_texts or 'LLaMA' in markdown_texts
+    assert 'Real-Time' in markdown_texts
     
-    # Verify both have appropriate labels
-    assert 'RFP-Validated' in markdown_texts or 'cached' in markdown_texts.lower()
-    assert 'Real-Time' in markdown_texts or 'Interactive' in markdown_texts
-
-
-def test_render_insights_tab_gemini_http_error():
-    """Test handling of HTTP errors from FastAPI."""
-    forecast = [100, 110, 120]
-    product = {'name': 'Test', 'sku': 'T1', 'product_id': 'p1'}
-    scenario_desc = 'Test'
-    lead_time_days = 5
+    # Verify Gemini is NOT in insights tab (moved to separate tab)
+    assert 'Gemini 2.5 Flash' not in markdown_texts
     
-    mock_st_local = MockStreamlit()
-    mock_response = MagicMock()
-    mock_response.status_code = 500
-    
-    with patch('components.tabs.st', mock_st_local):
-        with patch('requests.get', return_value=mock_response):
-            with patch('utils.ai_insights_groq.get_forecast_insight', return_value="Groq insight"):
-                with patch('utils.ai_insights_groq.get_stock_insight', return_value="Groq insight"):
-                    with patch('utils.ai_insights_groq.get_risk_insight', return_value="Groq insight"):
-                        # Should not crash
-                        render_insights_tab(forecast, product, scenario_desc, lead_time_days, calculate_stock_recommendation)
-    
-    # Verify error message shown
-    write_texts = ' '.join(str(call) for call in mock_st_local.write_calls)
-    assert 'Failed' in write_texts or 'HTTP' in write_texts or '500' in write_texts
+    # Verify 3 Groq expanders + 1 technical = 4 total
+    assert len(mock_st_local.expander_calls) == 4
