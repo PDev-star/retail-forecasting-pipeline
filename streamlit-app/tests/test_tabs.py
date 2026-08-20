@@ -40,7 +40,8 @@ def test_render_gemini_tab_loads_without_crash():
     from components.tabs import render_gemini_tab
     
     with patch('components.tabs.st'):
-        with patch('components.tabs.requests.get') as mock_get:
+        # Patch requests.get at the correct location (inside the function)
+        with patch('requests.get') as mock_get:
             mock_response = MagicMock()
             mock_response.status_code = 200
             mock_response.json.return_value = {"success": False, "insights": []}

@@ -269,7 +269,7 @@ def render_gemini_tab():
 def render_insights_tab(forecast, product, scenario_desc, lead_time_days, calculate_stock_recommendation):
     """Render real-time AI insights tab (Groq LLaMA - product-specific analysis)."""
     st.markdown("### 💡 AI-Powered Real-Time Insights")
-    st.caption("Groq LLaMA 3.3 70B generates live analysis based on YOUR current product & forecast data")
+    st.markdown("*Groq LLaMA 3.3 70B generates live analysis based on YOUR current product & forecast data*")
     st.markdown("---")
 
     # Calculate metrics
