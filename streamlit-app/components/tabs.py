@@ -37,9 +37,8 @@ def render_forecast_tab(forecast, baseline_forecast, horizon, product, scenario_
     st.markdown("### 📊 Demand Forecast Comparison")
     st.caption("Prophet model trained on historical sales data • Compare baseline vs scenario impact")
     
-    # If scenario is Normal, don't show comparison
+    # If scenario is Normal, don't show comparison - render single chart WITHOUT duplicate scenario text
     if scenario_type == "Normal" or adjustment_factor == 1.0:
-        st.info(f"**Scenario:** {scenario_desc}")
         return render_forecast_chart(forecast, horizon, product, scenario_desc)
     
     # Side-by-side comparison for non-Normal scenarios
