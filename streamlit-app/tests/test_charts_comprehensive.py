@@ -22,12 +22,14 @@ def mock_product():
 
 @pytest.fixture
 def mock_streamlit():
-    """Mock streamlit UI functions"""
+    """Mock streamlit UI functions with proper columns setup"""
     with patch('components.charts.st') as mock_st:
         mock_st.markdown = MagicMock()
         mock_st.info = MagicMock()
         mock_st.plotly_chart = MagicMock()
-        mock_st.columns = MagicMock(return_value=[MagicMock() for _ in range(4)])
+        # Create 4 mock column objects
+        mock_columns = [MagicMock() for _ in range(4)]
+        mock_st.columns = MagicMock(return_value=mock_columns)
         yield mock_st
 
 
@@ -70,7 +72,14 @@ def test_render_forecast_chart_with_long_horizon(mock_product):
     horizon = 90
     forecast = [100.0] * horizon
     
-    with patch('components.charts.st'):
+    # Properly mock streamlit with columns support
+    with patch('components.charts.st') as mock_st:
+        mock_st.markdown = MagicMock()
+        mock_st.info = MagicMock()
+        mock_st.plotly_chart = MagicMock()
+        mock_columns = [MagicMock() for _ in range(4)]
+        mock_st.columns = MagicMock(return_value=mock_columns)
+        
         result = render_forecast_chart(forecast, horizon, mock_product, "Long term")
     
     assert len(result) == horizon
@@ -82,7 +91,14 @@ def test_render_forecast_chart_varying_demand(mock_product):
     horizon = 5
     forecast = [10.0, 20.0, 30.0, 40.0, 50.0]
     
-    with patch('components.charts.st'):
+    # Properly mock streamlit with columns support
+    with patch('components.charts.st') as mock_st:
+        mock_st.markdown = MagicMock()
+        mock_st.info = MagicMock()
+        mock_st.plotly_chart = MagicMock()
+        mock_columns = [MagicMock() for _ in range(4)]
+        mock_st.columns = MagicMock(return_value=mock_columns)
+        
         result = render_forecast_chart(forecast, horizon, mock_product, "Varying demand")
     
     assert len(result) == horizon
