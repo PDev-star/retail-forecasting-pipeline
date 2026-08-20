@@ -160,11 +160,14 @@ if _should_run_ui():
     
     # Fetch forecast button
     if st.button("🔮 Generate Forecast", type="primary", use_container_width=True):
-        with st.spinner(f"Fetching {horizon}-day forecast via FastAPI Gateway..."):
+        with st.spinner(f"📊 Fetching {horizon}-day forecast via FastAPI Gateway..."):
             forecast = get_forecast(product["product_id"], horizon)
             
             if forecast:
-                # Apply scenario adjustment
+                # Store BASELINE (normal, no adjustment)
+                st.session_state["baseline_forecast"] = forecast
+                
+                # Apply scenario adjustment for SCENARIO forecast
                 adjusted_forecast = [val * adjustment_factor for val in forecast]
                 
                 # Store in session state
@@ -174,6 +177,7 @@ if _should_run_ui():
                 st.session_state["product"] = product
                 st.session_state["lead_time_days"] = lead_time_days
                 st.session_state["scenario_type"] = scenario_type
+                st.session_state["adjustment_factor"] = adjustment_factor
                 st.success("✅ Forecast generated successfully!")
     
     # Display results or welcome screen
@@ -216,7 +220,20 @@ if _should_run_ui():
         
         with tab_container:
             if st.session_state.active_tab == "📊 Forecast Chart":
-                df_forecast = render_forecast_tab(forecast, horizon, product, scenario_desc)
+                # Get baseline forecast (if available)
+                baseline_forecast = st.session_state.get("baseline_forecast", forecast)
+                adjustment_factor = st.session_state.get("adjustment_factor", 1.0)
+                scenario_type = st.session_state.get("scenario_type", "Normal")
+                
+                df_forecast = render_forecast_tab(
+                    forecast=forecast,
+                    baseline_forecast=baseline_forecast,
+                    horizon=horizon,
+                    product=product,
+                    scenario_desc=scenario_desc,
+                    adjustment_factor=adjustment_factor,
+                    scenario_type=scenario_type
+                )
             
             elif st.session_state.active_tab == "📋 Data Table":
                 # Generate df_forecast if not already available
