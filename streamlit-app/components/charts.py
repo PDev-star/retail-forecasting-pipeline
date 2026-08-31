@@ -25,7 +25,6 @@ except ImportError:
 def render_forecast_chart(forecast, horizon, product, scenario_desc):
     """Render the demand forecast chart with confidence bands."""
     st.markdown(f"### Demand Forecast - Next {horizon} Days")
-    st.info(f"**Scenario:** {scenario_desc}")
 
     # Prepare data for chart
     dates = [(datetime.now() + timedelta(days=i)).strftime("%Y-%m-%d") for i in range(1, horizon + 1)]
