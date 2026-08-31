@@ -42,7 +42,7 @@ def test_render_forecast_chart_basic(mock_streamlit, mock_product):
     
     # Verify UI methods were called
     assert mock_streamlit.markdown.called
-    assert mock_streamlit.info.called
+    # Note: st.info() removed to avoid duplicate scenario display (shown in tabs.py instead)
     assert mock_streamlit.plotly_chart.called
     
     # Verify returns a DataFrame
