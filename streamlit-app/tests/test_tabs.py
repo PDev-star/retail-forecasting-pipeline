@@ -52,26 +52,53 @@ def test_render_gemini_tab_loads_without_crash():
 
 
 def test_render_forecast_tab_new_signature():
-    """Test render_forecast_tab accepts new parameters for side-by-side comparison"""
+    """Test render_forecast_tab with simplified single-scenario view"""
     from components.tabs import render_forecast_tab
     
-    with patch('components.tabs.st'):
+    # Create mock column objects that support context manager protocol
+    mock_col1, mock_col2, mock_col3, mock_col4 = MagicMock(), MagicMock(), MagicMock(), MagicMock()
+    for col in [mock_col1, mock_col2, mock_col3, mock_col4]:
+        col.__enter__ = MagicMock(return_value=col)
+        col.__exit__ = MagicMock(return_value=False)
+        # Mock the metric and markdown methods
+        col.metric = MagicMock()
+        col.markdown = MagicMock()
+    
+    # Patch streamlit and set up mocks
+    with patch('components.tabs.st') as mock_st:
+        # Configure columns to return our mocked columns
+        mock_st.columns = MagicMock(return_value=[mock_col1, mock_col2, mock_col3, mock_col4])
+        # Mock other st methods
+        mock_st.subheader = MagicMock()
+        mock_st.markdown = MagicMock()
+        
         with patch('components.tabs.render_forecast_chart') as mock_chart:
-            forecast = [100.0] * 30
-            baseline_forecast = [90.0] * 30
-            horizon = 30
-            product = {"name": "Test", "sku": "TEST001", "product_id": "cat1", "color": "#1f77b4"}
-            
-            # Test with Normal scenario (no comparison)
-            render_forecast_tab(
-                forecast=forecast,
-                baseline_forecast=baseline_forecast,
-                horizon=horizon,
-                product=product,
-                scenario_desc="Normal scenario",
-                adjustment_factor=1.0,
-                scenario_type="Normal"
-            )
-            
-            # Should render single chart for Normal scenario
-            assert mock_chart.called
+            with patch('components.tabs.pd') as mock_pd:
+                # Mock pandas DataFrame
+                mock_df = MagicMock()
+                mock_df.columns = ["Predicted Demand"]
+                mock_pd.DataFrame.return_value = mock_df
+                
+                forecast = [100.0] * 30
+                baseline_forecast = [90.0] * 30
+                horizon = 30
+                product = {"name": "Test", "sku": "TEST001", "product_id": "cat1", "color": "#1f77b4"}
+                
+                # Test with Normal scenario - should render single clean view
+                df_result = render_forecast_tab(
+                    forecast=forecast,
+                    baseline_forecast=baseline_forecast,
+                    horizon=horizon,
+                    product=product,
+                    scenario_desc="Normal scenario",
+                    adjustment_factor=1.0,
+                    scenario_type="Normal"
+                )
+                
+                # Verify chart was rendered
+                assert mock_chart.called
+                # Verify st.columns was called with 4
+                mock_st.columns.assert_called_with(4)
+                # Should return the mocked DataFrame
+                assert df_result is not None
+                assert df_result == mock_df
