@@ -27,134 +27,66 @@ from components.charts import render_forecast_chart, render_inventory_chart
 
 def render_forecast_tab(forecast, baseline_forecast, horizon, product, scenario_desc, adjustment_factor=1.0, scenario_type="Normal"):
     """
-    Render the forecast chart tab with side-by-side comparison.
+    Render the forecast chart tab - simplified single-scenario view.
     
-    Shows:
-    - Baseline (Normal) forecast on left
-    - Selected Scenario forecast on right
-    - Delta metrics showing the impact
+    What-if scenarios are selected via dropdown in sidebar.
+    User can switch between scenarios to see how forecasts change.
     """
-    st.markdown("### 📊 Demand Forecast Comparison")
-    st.caption("Prophet model trained on historical sales data • Compare baseline vs scenario impact")
+    st.markdown("### 📊 Demand Forecast")
+    st.caption("Prophet model trained on historical sales data")
     
-    # If scenario is Normal, don't show comparison - render single chart WITHOUT duplicate scenario text
-    if scenario_type == "Normal" or adjustment_factor == 1.0:
-        return render_forecast_chart(forecast, horizon, product, scenario_desc)
+    # Show current scenario info
+    st.info(f"🎯 **Scenario:** {scenario_desc}")
     
-    # Side-by-side comparison for non-Normal scenarios
-    st.info(f"**Scenario:** {scenario_desc} | **Adjustment Factor:** {adjustment_factor:.1%}")
+    # Render the forecast chart for selected scenario
+    render_forecast_chart(forecast, horizon, product, scenario_desc)
     
-    # Calculate metrics
-    baseline_avg = sum(baseline_forecast) / len(baseline_forecast)
-    scenario_avg = sum(forecast) / len(forecast)
-    pct_change = ((scenario_avg - baseline_avg) / baseline_avg) * 100
-    
-    baseline_total = sum(baseline_forecast)
-    scenario_total = sum(forecast)
-    total_diff = scenario_total - baseline_total
-    
-    # Show key insight at top
-    if pct_change > 0:
-        insight_emoji = "📈"
-        insight_text = f"This scenario increases average daily demand by **{abs(pct_change):.1f}%** ({baseline_avg:.1f} → {scenario_avg:.1f} units/day)"
-    elif pct_change < 0:
-        insight_emoji = "📉"
-        insight_text = f"This scenario decreases average daily demand by **{abs(pct_change):.1f}%** ({baseline_avg:.1f} → {scenario_avg:.1f} units/day)"
-    else:
-        insight_emoji = "➡️"
-        insight_text = "This scenario has no significant impact on demand"
-    
-    st.markdown(f"{insight_emoji} **Key Insight:** {insight_text}")
-    
-    # Calculate peak metrics
-    baseline_peak = max(baseline_forecast)
-    scenario_peak = max(forecast)
-    peak_diff = scenario_peak - baseline_peak
-    baseline_min = min(baseline_forecast)
-    scenario_min = min(forecast)
-    
-    # Compact Business Impact Summary (at top, before charts)
-    st.markdown("### 💼 Business Impact Summary")
-    impact_cols = st.columns([1, 1, 1, 1])
-    
-    with impact_cols[0]:
-        st.metric(
-            "Avg Daily Demand",
-            f"{scenario_avg:.1f} units",
-            delta=f"{pct_change:+.1f}%",
-            help="Scenario vs baseline average"
-        )
-    
-    with impact_cols[1]:
-        st.metric(
-            "Total Demand ({} days)".format(horizon),
-            f"{scenario_total:.0f} units",
-            delta=f"{total_diff:+.0f} units",
-            help="Scenario vs baseline total"
-        )
-    
-    with impact_cols[2]:
-        st.metric(
-            "Peak Day Demand",
-            f"{scenario_peak:.1f} units",
-            delta=f"{peak_diff:+.1f}",
-            help="Highest daily forecast"
-        )
-    
-    with impact_cols[3]:
-        st.metric(
-            "Minimum Day Demand",
-            f"{scenario_min:.1f} units",
-            delta=f"{scenario_min - baseline_min:+.1f}",
-            help="Lowest daily forecast"
-        )
+    # Calculate and display key metrics
+    avg_demand = sum(forecast) / len(forecast)
+    total_demand = sum(forecast)
+    peak_demand = max(forecast)
+    min_demand = min(forecast)
     
     st.markdown("---")
+    st.markdown("### 📊 Forecast Metrics")
     
-    # Collapsible side-by-side comparison charts (saves space)
-    with st.expander("📊 Detailed Forecast Comparison (Baseline vs Scenario)", expanded=True):
-        col1, col2 = st.columns(2, gap="medium")
-        
-        with col1:
-            st.markdown("**📊 Baseline (Normal)**")
-            st.caption("Standard business-as-usual forecast")
-            render_forecast_chart(baseline_forecast, horizon, product, "Normal - Business as usual")
-            
-            # Compact inline metrics
-            m1, m2, m3, m4 = st.columns(4)
-            with m1:
-                st.metric("Avg Daily Demand", f"{baseline_avg:.1f} units")
-            with m2:
-                st.metric("Total Period Demand", f"{baseline_total:.0f} units")
-            with m3:
-                st.metric("Peak Day Demand", f"{baseline_peak:.1f} units")
-            with m4:
-                st.metric("Minimum Day Demand", f"{baseline_min:.1f} units")
-        
-        with col2:
-            st.markdown(f"**🎯 {scenario_type}**")
-            st.caption(scenario_desc)
-            render_forecast_chart(forecast, horizon, product, scenario_desc)
-            
-            # Compact inline metrics with deltas
-            m1, m2, m3, m4 = st.columns(4)
-            with m1:
-                st.metric("Avg Daily Demand", f"{scenario_avg:.1f} units", delta=f"{pct_change:+.1f}%")
-            with m2:
-                st.metric("Total Period Demand", f"{scenario_total:.0f} units", delta=f"{total_diff:+.0f} units")
-            with m3:
-                st.metric("Peak Day Demand", f"{scenario_peak:.1f} units", delta=f"{peak_diff:+.1f}")
-            with m4:
-                st.metric("Minimum Day Demand", f"{scenario_min:.1f} units", delta=f"{scenario_min - baseline_min:+.1f}")
+    # Display metrics in 4 columns
+    col1, col2, col3, col4 = st.columns(4)
     
-    # Return DataFrame for data tab
+    with col1:
+        st.metric(
+            "Avg Daily Demand",
+            f"{avg_demand:.1f} units",
+            help="Average daily demand over forecast period"
+        )
+    
+    with col2:
+        st.metric(
+            f"Total ({horizon}d)",
+            f"{total_demand:.0f} units",
+            help="Total demand over forecast period"
+        )
+    
+    with col3:
+        st.metric(
+            "Peak Day",
+            f"{peak_demand:.1f} units",
+            help="Highest daily demand in forecast"
+        )
+    
+    with col4:
+        st.metric(
+            "Low Day",
+            f"{min_demand:.1f} units",
+            help="Lowest daily demand in forecast"
+        )
+    
+    # Return DataFrame for data tab (single scenario column)
     from datetime import datetime, timedelta
     dates = [(datetime.now() + timedelta(days=i)).strftime("%Y-%m-%d") for i in range(1, horizon + 1)]
     df_forecast = pd.DataFrame({
         "Date": dates,
-        "Baseline": baseline_forecast,
-        "Scenario": forecast,
-        "Difference": [s - b for s, b in zip(forecast, baseline_forecast)]
+        "Predicted Demand": forecast
     })
     
     return df_forecast
