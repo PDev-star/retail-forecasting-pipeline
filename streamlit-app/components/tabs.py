@@ -183,14 +183,17 @@ def render_gemini_tab():
     with st.spinner("📡 Loading Gemini insights from Delta Lake..."):
         try:
             # Fetch Gemini insights from FastAPI
+            # Increased timeout to 30s to handle cache hits after warmup
             response = requests.get(
                 f"{FASTAPI_URL}/ai-insights",
                 headers={"X-API-Key": API_KEY},
-                timeout=10
+                timeout=30
             )
             
             if response.status_code == 200:
                 data = response.json()
+                
+                # Check if request was successful
                 if data.get("success") and data.get("insights"):
                     # Display each scenario
                     for insight in data["insights"]:
@@ -200,14 +203,45 @@ def render_gemini_tab():
                             st.markdown("---")
                             st.markdown(insight["explanation"])
                             st.caption(f"Source: `{insight['context_table']}` | Generated: {insight['generated_at'][:10]}")
-                    st.success(f"✅ {data['total']} validated Gemini scenarios loaded from Delta Lake (zero inference API calls)")
+                    
+                    # Show cache status
+                    cache_status = "(cached)" if data.get("cached") else "(fresh from DB)"
+                    if data.get("stale"):
+                        cache_status = "(cached, refreshing in background)"
+                    
+                    st.success(f"✅ {data['total']} validated Gemini scenarios loaded {cache_status}")
+                    
+                elif not data.get("success"):
+                    # Handle graceful errors (warehouse warming up, etc.)
+                    error_msg = data.get("error", "Unknown error")
+                    user_msg = data.get("message", "")
+                    
+                    if "cold start" in error_msg.lower() or "starting" in error_msg.lower():
+                        st.warning(f"⏳ {user_msg}")
+                        st.info("The SQL warehouse is waking up (cold start). Please wait 30-60 seconds and refresh this tab.")
+                        if st.button("🔄 Retry Now"):
+                            st.rerun()
+                    else:
+                        st.warning(f"⚠️ {user_msg or 'No Gemini insights found in cache.'}")
+                        if st.button("🔄 Retry"):
+                            st.rerun()
                 else:
                     st.warning("⚠️ No Gemini insights found in cache.")
+                    st.info("💡 Gemini insights require the notebook scenario cells (71, 72, 74) to be run first.")
             else:
-                st.error(f"Failed to fetch Gemini insights: HTTP {response.status_code}")
+                st.error(f"❌ Failed to fetch Gemini insights: HTTP {response.status_code}")
+                if st.button("🔄 Retry"):
+                    st.rerun()
+        except requests.Timeout:
+            st.error("⏱️ Request timed out (30s). The warehouse may be starting up.")
+            st.info("Please wait a moment and try again. First call after deployment can take 2-3 minutes.")
+            if st.button("🔄 Retry Now"):
+                st.rerun()
         except Exception as e:
-            st.error(f"Error loading Gemini insights: {e}")
+            st.error(f"❌ Error loading Gemini insights: {e}")
             st.info("💡 Gemini insights require the notebook scenario cells (71, 72, 74) to be run first.")
+            if st.button("🔄 Retry"):
+                st.rerun()
 
 
 def render_insights_tab(forecast, product, scenario_desc, lead_time_days, calculate_stock_recommendation):

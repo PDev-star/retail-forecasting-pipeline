@@ -4,10 +4,16 @@
 
 import os
 from datetime import datetime
+import asyncio
+import logging
 
 import requests
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import FastAPI, Header, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="Retail Forecast API Gateway",
@@ -59,7 +65,14 @@ async def root():
 
 @app.get("/health")
 async def health():
-    return {"status": "healthy", "timestamp": datetime.utcnow().isoformat()}
+    """Lightweight health check - does NOT trigger cache warmup"""
+    return {
+        "status": "healthy",
+        "timestamp": datetime.utcnow().isoformat(),
+        "cache_populated": _ai_insights_cache["data"] is not None,
+        "cache_size": len(_ai_insights_cache["data"]) if _ai_insights_cache["data"] else 0,
+        "warmup_completed": _warmup_status["completed"]
+    }
 
 
 @app.get("/products")
@@ -108,8 +121,21 @@ async def get_forecast(product_id: str, horizon: int = 14, api_key: str = Header
         raise HTTPException(status_code=503, detail=str(e))
 
 
-# Simple in-memory cache (resets on restart, perfect for Render free tier)
-_ai_insights_cache = {"data": None, "timestamp": None, "ttl": 300}  # 5 min TTL
+# In-memory cache with stale-while-revalidate pattern
+_ai_insights_cache = {
+    "data": None, 
+    "timestamp": None, 
+    "ttl": 300,  # 5 min fresh
+    "stale_ttl": 3600  # 1 hour stale (serve old data while fetching new)
+}
+
+# Warmup status tracking
+_warmup_status = {
+    "completed": False, 
+    "in_progress": False, 
+    "last_attempt": None, 
+    "error": None
+}
 
 
 @app.get("/ai-insights")
@@ -128,14 +154,20 @@ async def get_ai_insights(scenario_id: int = None, api_key: str = Header(..., al
     verify_api_key(api_key)
     
     # Check cache first (reduces DB load by 95%+)
-    cache_valid = (
+    cache_fresh = (
         _ai_insights_cache["data"] is not None 
         and _ai_insights_cache["timestamp"] is not None
         and (datetime.utcnow() - _ai_insights_cache["timestamp"]).total_seconds() < _ai_insights_cache["ttl"]
     )
     
-    if cache_valid:
-        # Return cached data (filter by scenario_id if requested)
+    cache_stale = (
+        _ai_insights_cache["data"] is not None 
+        and _ai_insights_cache["timestamp"] is not None
+        and (datetime.utcnow() - _ai_insights_cache["timestamp"]).total_seconds() < _ai_insights_cache["stale_ttl"]
+    )
+    
+    if cache_fresh:
+        # Return fresh cached data (filter by scenario_id if requested)
         cached_insights = _ai_insights_cache["data"]
         if scenario_id:
             cached_insights = [ins for ins in cached_insights if ins.get("scenario_id") == scenario_id]
@@ -146,6 +178,64 @@ async def get_ai_insights(scenario_id: int = None, api_key: str = Header(..., al
             "insights": cached_insights,
             "cached": True,
             "cache_age_seconds": int((datetime.utcnow() - _ai_insights_cache["timestamp"]).total_seconds()),
+            "generated_at": datetime.utcnow().isoformat()
+        }
+    
+    # Cache expired but still usable (stale-while-revalidate)
+    # Return stale data immediately if warehouse is cold starting
+    if cache_stale:
+        # Try to fetch fresh data with SHORT timeout
+        # If it fails (warehouse cold start), return stale data
+        try:
+            response = requests.post(
+                f"{DATABRICKS_HOST}/api/2.0/sql/statements",
+                headers={
+                    "Authorization": f"Bearer {DATABRICKS_TOKEN}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "warehouse_id": SQL_WAREHOUSE_ID,
+                    "statement": """
+                        SELECT scenario_id, scenario_name, ai_provider, prompt_type,
+                               question, context_table, explanation, generated_at
+                        FROM workspace.default.gemini_ai_explanations
+                        ORDER BY scenario_id
+                    """,
+                    "wait_timeout": "10s"  # Short timeout - if warehouse is cold, will timeout
+                },
+                timeout=15,  # 15 second timeout for background refresh
+            )
+            
+            # If successful, update cache in background (don't block response)
+            if response.status_code == 200:
+                result = response.json()
+                if result.get("status", {}).get("state") == "SUCCEEDED":
+                    insights = []
+                    if "result" in result and "data_array" in result["result"]:
+                        if "manifest" in result and "schema" in result["manifest"]:
+                            columns = [col["name"] for col in result["manifest"]["schema"]["columns"]]
+                            for row in result["result"]["data_array"]:
+                                insights.append(dict(zip(columns, row)))
+                    
+                    # Update cache with fresh data
+                    _ai_insights_cache["data"] = insights
+                    _ai_insights_cache["timestamp"] = datetime.utcnow()
+        except:
+            pass  # Ignore errors during background refresh
+        
+        # Return stale cached data (better than making user wait for warehouse)
+        cached_insights = _ai_insights_cache["data"]
+        if scenario_id:
+            cached_insights = [ins for ins in cached_insights if ins.get("scenario_id") == scenario_id]
+        
+        return {
+            "success": True,
+            "total": len(cached_insights),
+            "insights": cached_insights,
+            "cached": True,
+            "stale": True,  # Indicate data is from stale cache
+            "cache_age_seconds": int((datetime.utcnow() - _ai_insights_cache["timestamp"]).total_seconds()),
+            "message": "Serving cached data while warehouse warms up. Refresh in 30-60s for latest.",
             "generated_at": datetime.utcnow().isoformat()
         }
     
@@ -176,9 +266,9 @@ async def get_ai_insights(scenario_id: int = None, api_key: str = Header(..., al
             json={
                 "warehouse_id": SQL_WAREHOUSE_ID,
                 "statement": base_query,
-                "wait_timeout": "90s"  # Increased from 30s to handle warehouse cold start
+                "wait_timeout": "180s"  # 3 minutes to handle Render + warehouse double cold start
             },
-            timeout=120,  # Increased from 35s to 120s (matches other endpoints)
+            timeout=200,  # 200 seconds for first deployment scenario
         )
         
         if response.status_code != 200:
@@ -288,3 +378,169 @@ async def get_ai_insights(scenario_id: int = None, api_key: str = Header(..., al
             "error": f"Unexpected error: {str(e)}",
             "generated_at": datetime.utcnow().isoformat()
         }
+
+
+async def warmup_cache_background():
+    """
+    Background task to warm up the AI insights cache on startup.
+    This prevents the first user from seeing 'No insights found'.
+    Runs asynchronously without blocking app startup.
+    """
+    if _warmup_status["in_progress"]:
+        logger.info("Warmup already in progress, skipping...")
+        return
+    
+    _warmup_status["in_progress"] = True
+    _warmup_status["last_attempt"] = datetime.utcnow()
+    
+    try:
+        logger.info("🔥 Starting cache warmup...")
+        
+        # Build SQL query (fetch all scenarios)
+        base_query = """
+            SELECT 
+                scenario_id,
+                scenario_name,
+                ai_provider,
+                prompt_type,
+                question,
+                context_table,
+                explanation,
+                generated_at
+            FROM workspace.default.gemini_ai_explanations
+            ORDER BY scenario_id
+        """
+        
+        # Execute with LONG timeout (first startup can be slow)
+        response = requests.post(
+            f"{DATABRICKS_HOST}/api/2.0/sql/statements",
+            headers={
+                "Authorization": f"Bearer {DATABRICKS_TOKEN}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "warehouse_id": SQL_WAREHOUSE_ID,
+                "statement": base_query,
+                "wait_timeout": "180s"  # 3 minutes for initial startup
+            },
+            timeout=200,  # Allow extra time on first deployment
+        )
+        
+        if response.status_code != 200:
+            logger.warning(f"⚠️ Warmup failed: HTTP {response.status_code}")
+            _warmup_status["error"] = f"HTTP {response.status_code}"
+            _warmup_status["completed"] = False
+            return
+        
+        result = response.json()
+        query_state = result.get("status", {}).get("state", "UNKNOWN")
+        
+        if query_state == "PENDING":
+            logger.warning("⚠️ Warmup query still pending after 180s (warehouse cold start)")
+            _warmup_status["error"] = "Warehouse cold start timeout"
+            _warmup_status["completed"] = False
+            return
+        
+        if query_state != "SUCCEEDED":
+            logger.warning(f"⚠️ Warmup query failed: {query_state}")
+            _warmup_status["error"] = f"Query state: {query_state}"
+            _warmup_status["completed"] = False
+            return
+        
+        # Parse results
+        insights = []
+        if "result" in result and "data_array" in result["result"]:
+            if "manifest" in result and "schema" in result["manifest"]:
+                columns = [col["name"] for col in result["manifest"]["schema"]["columns"]]
+                
+                for row in result["result"]["data_array"]:
+                    insight = dict(zip(columns, row))
+                    insights.append(insight)
+        
+        # Update cache
+        _ai_insights_cache["data"] = insights
+        _ai_insights_cache["timestamp"] = datetime.utcnow()
+        _warmup_status["completed"] = True
+        _warmup_status["error"] = None
+        
+        logger.info(f"✅ Cache warmup completed: {len(insights)} insights loaded")
+        
+    except requests.Timeout:
+        logger.error("❌ Warmup timeout (SQL warehouse cold start > 200s)")
+        _warmup_status["error"] = "Timeout after 200s"
+        _warmup_status["completed"] = False
+    except Exception as e:
+        logger.error(f"❌ Warmup error: {str(e)}")
+        _warmup_status["error"] = str(e)
+        _warmup_status["completed"] = False
+    finally:
+        _warmup_status["in_progress"] = False
+
+
+@app.on_event("startup")
+async def startup_event():
+    """
+    FastAPI startup event - triggers background cache warmup.
+    Doesn't block app startup, so Render health checks pass immediately.
+    """
+    logger.info("🚀 FastAPI starting up...")
+    logger.info("🔥 Scheduling background cache warmup...")
+    
+    # Run warmup in background (non-blocking)
+    asyncio.create_task(warmup_cache_background())
+    
+    logger.info("✅ App ready (warmup running in background)")
+
+
+@app.get("/warmup")
+async def trigger_warmup(background_tasks: BackgroundTasks):
+    """
+    Manual endpoint to trigger cache warmup.
+    Useful for:
+    - Testing
+    - Re-warming after cache expiry
+    - Forcing refresh of stale data
+    """
+    if _warmup_status["in_progress"]:
+        return {
+            "status": "already_running",
+            "message": "Cache warmup already in progress",
+            "started_at": _warmup_status["last_attempt"].isoformat() if _warmup_status["last_attempt"] else None
+        }
+    
+    # Trigger warmup in background
+    background_tasks.add_task(warmup_cache_background)
+    
+    return {
+        "status": "triggered",
+        "message": "Cache warmup started in background",
+        "current_cache_size": len(_ai_insights_cache["data"]) if _ai_insights_cache["data"] else 0
+    }
+
+
+@app.get("/cache-status")
+async def cache_status():
+    """
+    Check cache and warmup status.
+    Useful for debugging and monitoring.
+    """
+    cache_age = None
+    if _ai_insights_cache["timestamp"]:
+        cache_age = int((datetime.utcnow() - _ai_insights_cache["timestamp"]).total_seconds())
+    
+    return {
+        "cache": {
+            "populated": _ai_insights_cache["data"] is not None,
+            "size": len(_ai_insights_cache["data"]) if _ai_insights_cache["data"] else 0,
+            "age_seconds": cache_age,
+            "ttl_seconds": _ai_insights_cache["ttl"],
+            "expires_in_seconds": (_ai_insights_cache["ttl"] - cache_age) if cache_age else None
+        },
+        "warmup": {
+            "completed": _warmup_status["completed"],
+            "in_progress": _warmup_status["in_progress"],
+            "last_attempt": _warmup_status["last_attempt"].isoformat() if _warmup_status["last_attempt"] else None,
+            "error": _warmup_status["error"]
+        },
+        "timestamp": datetime.utcnow().isoformat()
+    }
