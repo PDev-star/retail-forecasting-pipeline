@@ -6,6 +6,8 @@ import os
 from datetime import datetime
 import asyncio
 import logging
+import json
+import base64
 
 import requests
 from fastapi import FastAPI, Header, HTTPException, BackgroundTasks
@@ -141,8 +143,9 @@ _warmup_status = {
 @app.get("/ai-insights")
 async def get_ai_insights(scenario_id: int = None, api_key: str = Header(..., alias="X-API-Key")):
     """
-    Get Gemini 2.5 Flash AI explanations from Delta Lake cache.
-    Includes 5-minute in-memory caching to reduce database load.
+    Get Gemini 2.5 Flash AI explanations from Unity Catalog Volume JSON cache.
+    NO SQL WAREHOUSE REQUIRED - reads pre-computed JSON file.
+    Includes 5-minute in-memory caching to reduce API load.
     
     Args:
         scenario_id: Optional scenario filter (1, 2, or 3)
@@ -182,40 +185,23 @@ async def get_ai_insights(scenario_id: int = None, api_key: str = Header(..., al
         }
     
     # Cache expired but still usable (stale-while-revalidate)
-    # Return stale data immediately if warehouse is cold starting
+    # Return stale data immediately, refresh from UC Volume in background
     if cache_stale:
-        # Try to fetch fresh data with SHORT timeout
-        # If it fails (warehouse cold start), return stale data
+        # Try to fetch fresh data from UC Volume (fast, no warehouse needed)
         try:
-            response = requests.post(
-                f"{DATABRICKS_HOST}/api/2.0/sql/statements",
+            response = requests.get(
+                f"{DATABRICKS_HOST}/api/2.0/fs/files/Volumes/workspace/default/api_cache/ai_insights.json",
                 headers={
                     "Authorization": f"Bearer {DATABRICKS_TOKEN}",
-                    "Content-Type": "application/json",
                 },
-                json={
-                    "warehouse_id": SQL_WAREHOUSE_ID,
-                    "statement": """
-                        SELECT scenario_id, scenario_name, ai_provider, prompt_type,
-                               question, context_table, explanation, generated_at
-                        FROM workspace.default.gemini_ai_explanations
-                        ORDER BY scenario_id
-                    """,
-                    "wait_timeout": "10s"  # Short timeout - if warehouse is cold, will timeout
-                },
-                timeout=15,  # 15 second timeout for background refresh
+                timeout=5  # UC Volume is fast, 5s is enough
             )
             
             # If successful, update cache in background (don't block response)
             if response.status_code == 200:
-                result = response.json()
-                if result.get("status", {}).get("state") == "SUCCEEDED":
-                    insights = []
-                    if "result" in result and "data_array" in result["result"]:
-                        if "manifest" in result and "schema" in result["manifest"]:
-                            columns = [col["name"] for col in result["manifest"]["schema"]["columns"]]
-                            for row in result["result"]["data_array"]:
-                                insights.append(dict(zip(columns, row)))
+                cache_data = response.json()
+                if isinstance(cache_data, dict) and "insights" in cache_data:
+                    insights = cache_data.get("insights", [])
                     
                     # Update cache with fresh data
                     _ai_insights_cache["data"] = insights
@@ -223,7 +209,7 @@ async def get_ai_insights(scenario_id: int = None, api_key: str = Header(..., al
         except:
             pass  # Ignore errors during background refresh
         
-        # Return stale cached data (better than making user wait for warehouse)
+        # Return stale cached data (better than making user wait)
         cached_insights = _ai_insights_cache["data"]
         if scenario_id:
             cached_insights = [ins for ins in cached_insights if ins.get("scenario_id") == scenario_id]
@@ -239,86 +225,47 @@ async def get_ai_insights(scenario_id: int = None, api_key: str = Header(..., al
             "generated_at": datetime.utcnow().isoformat()
         }
     
-    # Cache miss - query database
+    # Cache miss - read from Unity Catalog Volume (NO SQL WAREHOUSE NEEDED!)
     try:
-        # Build SQL query (no filter here, cache all scenarios)
-        base_query = """
-            SELECT 
-                scenario_id,
-                scenario_name,
-                ai_provider,
-                prompt_type,
-                question,
-                context_table,
-                explanation,
-                generated_at
-            FROM workspace.default.gemini_ai_explanations
-            ORDER BY scenario_id
-        """
-        
-        # Execute via Databricks SQL Execution API with INCREASED TIMEOUT
-        response = requests.post(
-            f"{DATABRICKS_HOST}/api/2.0/sql/statements",
+        # Read pre-computed JSON from UC Volume using Files API
+        # This is MUCH faster than SQL Execution API (no warehouse cold start)
+        # Note: DBFS is disabled in this workspace, using UC Volume instead
+        response = requests.get(
+            f"{DATABRICKS_HOST}/api/2.0/fs/files/Volumes/workspace/default/api_cache/ai_insights.json",
             headers={
                 "Authorization": f"Bearer {DATABRICKS_TOKEN}",
-                "Content-Type": "application/json",
             },
-            json={
-                "warehouse_id": SQL_WAREHOUSE_ID,
-                "statement": base_query,
-                "wait_timeout": "180s"  # 3 minutes to handle Render + warehouse double cold start
-            },
-            timeout=200,  # 200 seconds for first deployment scenario
+            timeout=10  # UC Volume reads are fast, only 10s needed
         )
         
         if response.status_code != 200:
-            # Return graceful error instead of crashing
+            # File might not exist yet - needs to be generated in notebook
             return {
                 "success": False,
                 "total": 0,
                 "insights": [],
                 "cached": False,
-                "error": f"Database query failed (HTTP {response.status_code})",
-                "message": "SQL warehouse may be starting up (cold start). Try again in 30-60 seconds.",
+                "error": f"Cache file not found (HTTP {response.status_code})",
+                "message": "AI insights need to be generated. Run notebook Cell 95 (Export to JSON) to create the cache in Unity Catalog volume.",
                 "generated_at": datetime.utcnow().isoformat()
             }
         
-        result = response.json()
+        # Files API returns JSON directly (not base64-encoded like DBFS)
+        cache_data = response.json()
         
-        # Check if query is still pending (warehouse cold start)
-        query_state = result.get("status", {}).get("state", "UNKNOWN")
-        
-        if query_state == "PENDING":
-            # Warehouse is starting up - return helpful message instead of error
+        if not isinstance(cache_data, dict) or "insights" not in cache_data:
             return {
                 "success": False,
                 "total": 0,
                 "insights": [],
                 "cached": False,
-                "error": "SQL warehouse is starting (cold start)",
-                "message": "Warehouse is waking up. This takes 30-60 seconds. Please retry in a moment.",
+                "error": "Invalid cache file format",
+                "message": "Cache file is corrupted. Re-run notebook Cell 95 (Export to JSON).",
                 "generated_at": datetime.utcnow().isoformat()
             }
         
-        if query_state != "SUCCEEDED":
-            return {
-                "success": False,
-                "total": 0,
-                "insights": [],
-                "cached": False,
-                "error": f"Query failed with state: {query_state}",
-                "generated_at": datetime.utcnow().isoformat()
-            }
-        
-        # Parse results
-        insights = []
-        if "result" in result and "data_array" in result["result"]:
-            if "manifest" in result and "schema" in result["manifest"]:
-                columns = [col["name"] for col in result["manifest"]["schema"]["columns"]]
-                
-                for row in result["result"]["data_array"]:
-                    insight = dict(zip(columns, row))
-                    insights.append(insight)
+        # Extract insights from pre-computed cache
+        insights = cache_data.get("insights", [])
         
         # Update cache (even if empty, to avoid repeated failed queries)
         _ai_insights_cache["data"] = insights
@@ -383,7 +330,7 @@ async def get_ai_insights(scenario_id: int = None, api_key: str = Header(..., al
 async def warmup_cache_background():
     """
     Background task to warm up the AI insights cache on startup.
-    This prevents the first user from seeing 'No insights found'.
+    Reads from Unity Catalog Volume (NO SQL warehouse needed - instant!).
     Runs asynchronously without blocking app startup.
     """
     if _warmup_status["in_progress"]:
@@ -394,68 +341,34 @@ async def warmup_cache_background():
     _warmup_status["last_attempt"] = datetime.utcnow()
     
     try:
-        logger.info("🔥 Starting cache warmup...")
+        logger.info("🔥 Starting cache warmup (UC Volume read - no SQL warehouse)...")
         
-        # Build SQL query (fetch all scenarios)
-        base_query = """
-            SELECT 
-                scenario_id,
-                scenario_name,
-                ai_provider,
-                prompt_type,
-                question,
-                context_table,
-                explanation,
-                generated_at
-            FROM workspace.default.gemini_ai_explanations
-            ORDER BY scenario_id
-        """
-        
-        # Execute with LONG timeout (first startup can be slow)
-        response = requests.post(
-            f"{DATABRICKS_HOST}/api/2.0/sql/statements",
+        # Read from Unity Catalog Volume - much faster than SQL warehouse!
+        response = requests.get(
+            f"{DATABRICKS_HOST}/api/2.0/fs/files/Volumes/workspace/default/api_cache/ai_insights.json",
             headers={
                 "Authorization": f"Bearer {DATABRICKS_TOKEN}",
-                "Content-Type": "application/json",
             },
-            json={
-                "warehouse_id": SQL_WAREHOUSE_ID,
-                "statement": base_query,
-                "wait_timeout": "180s"  # 3 minutes for initial startup
-            },
-            timeout=200,  # Allow extra time on first deployment
+            timeout=10  # UC Volume is fast!
         )
         
         if response.status_code != 200:
-            logger.warning(f"⚠️ Warmup failed: HTTP {response.status_code}")
-            _warmup_status["error"] = f"HTTP {response.status_code}"
+            logger.warning(f"⚠️ Warmup failed: HTTP {response.status_code} - cache file not found")
+            _warmup_status["error"] = f"Cache file not found (HTTP {response.status_code})"
             _warmup_status["completed"] = False
             return
         
-        result = response.json()
-        query_state = result.get("status", {}).get("state", "UNKNOWN")
+        # Files API returns JSON directly (not base64-encoded)
+        cache_data = response.json()
         
-        if query_state == "PENDING":
-            logger.warning("⚠️ Warmup query still pending after 180s (warehouse cold start)")
-            _warmup_status["error"] = "Warehouse cold start timeout"
+        if not isinstance(cache_data, dict) or "insights" not in cache_data:
+            logger.warning("⚠️ Warmup failed: Invalid UC Volume response")
+            _warmup_status["error"] = "Invalid cache file format"
             _warmup_status["completed"] = False
             return
         
-        if query_state != "SUCCEEDED":
-            logger.warning(f"⚠️ Warmup query failed: {query_state}")
-            _warmup_status["error"] = f"Query state: {query_state}"
-            _warmup_status["completed"] = False
-            return
-        
-        # Parse results
-        insights = []
-        if "result" in result and "data_array" in result["result"]:
-            if "manifest" in result and "schema" in result["manifest"]:
-                columns = [col["name"] for col in result["manifest"]["schema"]["columns"]]
-                
-                for row in result["result"]["data_array"]:
-                    insight = dict(zip(columns, row))
-                    insights.append(insight)
+        # Extract insights
+        insights = cache_data.get("insights", [])
         
         # Update cache
         _ai_insights_cache["data"] = insights

@@ -179,64 +179,52 @@ def test_ai_insights_invalid_api_key():
     assert "Invalid API key" in response.json()["detail"]
 
 
-@patch("api_gateway.requests.post")
-def test_ai_insights_success(mock_post):
-    """Test successful /ai-insights call with mocked Delta Lake response"""
-    # Mock Databricks SQL Execution API response
+@patch("api_gateway.requests.get")
+def test_ai_insights_success(mock_get):
+    """Test successful /ai-insights call with mocked UC Volume response"""
+    # Mock Databricks Files API response (UC Volume - returns JSON directly, not base64)
     mock_response = MagicMock()
     mock_response.status_code = 200
     mock_response.json.return_value = {
-        "status": {"state": "SUCCEEDED"},
-        "manifest": {
-            "schema": {
-                "columns": [
-                    {"name": "scenario_id"},
-                    {"name": "scenario_name"},
-                    {"name": "ai_provider"},
-                    {"name": "prompt_type"},
-                    {"name": "question"},
-                    {"name": "context_table"},
-                    {"name": "explanation"},
-                    {"name": "generated_at"},
-                ]
-            }
-        },
-        "result": {
-            "data_array": [
-                [
-                    1,
-                    "Forecast Interpretation",
-                    "Gemini 2.5 Flash",
-                    "data_explanation",
-                    "What do the forecast numbers tell us?",
-                    "workspace.default.forecasts",
-                    "This forecast shows an upward trend with increasing demand over the next 14 days.",
-                    "2026-08-10T12:00:00",
-                ],
-                [
-                    2,
-                    "Safety Stock Analysis",
-                    "Gemini 2.5 Flash",
-                    "inventory_explanation",
-                    "How much safety stock do we need?",
-                    "workspace.default.stock_levels",
-                    "Safety stock provides buffer against demand variability and supply delays.",
-                    "2026-08-10T12:00:00",
-                ],
-                [
-                    3,
-                    "What-If Scenarios",
-                    "Gemini 2.5 Flash",
-                    "risk_explanation",
-                    "What if we change service level?",
-                    "workspace.default.scenarios",
-                    "Service level trade-offs affect safety stock requirements and cost.",
-                    "2026-08-10T12:00:00",
-                ],
-            ],
-        },
+        "success": True,
+        "total": 3,
+        "insights": [
+            {
+                "scenario_id": 1,
+                "scenario_name": "Forecast Interpretation",
+                "ai_provider": "Gemini 2.5 Flash",
+                "prompt_type": "data_explanation",
+                "question": "What do the forecast numbers tell us?",
+                "context_table": "workspace.default.forecasts",
+                "explanation": "This forecast shows an upward trend with increasing demand over the next 14 days.",
+                "generated_at": "2026-08-10T12:00:00",
+            },
+            {
+                "scenario_id": 2,
+                "scenario_name": "Safety Stock Analysis",
+                "ai_provider": "Gemini 2.5 Flash",
+                "prompt_type": "inventory_explanation",
+                "question": "How much safety stock do we need?",
+                "context_table": "workspace.default.stock_levels",
+                "explanation": "Safety stock provides buffer against demand variability and supply delays.",
+                "generated_at": "2026-08-10T12:00:00",
+            },
+            {
+                "scenario_id": 3,
+                "scenario_name": "What-If Scenarios",
+                "ai_provider": "Gemini 2.5 Flash",
+                "prompt_type": "risk_explanation",
+                "question": "What if we change service level?",
+                "context_table": "workspace.default.scenarios",
+                "explanation": "Service level trade-offs affect safety stock requirements and cost.",
+                "generated_at": "2026-08-10T12:00:00",
+            },
+        ],
+        "cached": True,
+        "generated_at": "2026-08-10T12:00:00",
+        "cache_age_seconds": 0,
     }
-    mock_post.return_value = mock_response
+    mock_get.return_value = mock_response
 
     response = client.get("/ai-insights", headers={"X-API-Key": VALID_TEST_KEY})
 
@@ -258,43 +246,37 @@ def test_ai_insights_success(mock_post):
     assert "forecast" in first_insight["explanation"].lower()
 
 
-@patch("api_gateway.requests.post")
-def test_ai_insights_filter_by_scenario(mock_post):
+@patch("api_gateway.requests.get")
+def test_ai_insights_filter_by_scenario(mock_get):
     """Test /ai-insights with scenario_id filter"""
     mock_response = MagicMock()
     mock_response.status_code = 200
     mock_response.json.return_value = {
-        "status": {"state": "SUCCEEDED"},
-        "manifest": {
-            "schema": {
-                "columns": [
-                    {"name": "scenario_id"},
-                    {"name": "scenario_name"},
-                    {"name": "ai_provider"},
-                    {"name": "prompt_type"},
-                    {"name": "question"},
-                    {"name": "context_table"},
-                    {"name": "explanation"},
-                    {"name": "generated_at"},
-                ]
-            }
-        },
-        "result": {
-            "data_array": [
-                [
-                    2,
-                    "Safety Stock Analysis",
-                    "Gemini 2.5 Flash",
-                    "inventory_explanation",
-                    "How much safety stock?",
-                    "workspace.default.stock_levels",
-                    "Safety stock explanation...",
-                    "2026-08-10T12:00:00",
-                ]
-            ],
-        },
+        "success": True,
+        "total": 3,
+        "insights": [
+            {
+                "scenario_id": 1,
+                "scenario_name": "Forecast Interpretation",
+                "ai_provider": "Gemini 2.5 Flash",
+                "explanation": "Forecast explanation",
+            },
+            {
+                "scenario_id": 2,
+                "scenario_name": "Safety Stock Analysis",
+                "ai_provider": "Gemini 2.5 Flash",
+                "explanation": "Safety stock explanation",
+            },
+            {
+                "scenario_id": 3,
+                "scenario_name": "What-If Scenarios",
+                "ai_provider": "Gemini 2.5 Flash",
+                "explanation": "Scenario explanation",
+            },
+        ],
+        "cached": True,
     }
-    mock_post.return_value = mock_response
+    mock_get.return_value = mock_response
 
     response = client.get("/ai-insights?scenario_id=2", headers={"X-API-Key": VALID_TEST_KEY})
 
@@ -305,32 +287,19 @@ def test_ai_insights_filter_by_scenario(mock_post):
     assert data["insights"][0]["scenario_id"] == 2
 
 
-@patch("api_gateway.requests.post")
-def test_ai_insights_empty_cache(mock_post):
-    """Test /ai-insights when Delta Lake table is empty"""
+@patch("api_gateway.requests.get")
+def test_ai_insights_empty_cache(mock_get):
+    """Test /ai-insights when UC Volume cache file is empty"""
     mock_response = MagicMock()
     mock_response.status_code = 200
     mock_response.json.return_value = {
-        "status": {"state": "SUCCEEDED"},
-        "manifest": {
-            "schema": {
-                "columns": [
-                    {"name": "scenario_id"},
-                    {"name": "scenario_name"},
-                    {"name": "ai_provider"},
-                    {"name": "prompt_type"},
-                    {"name": "question"},
-                    {"name": "context_table"},
-                    {"name": "explanation"},
-                    {"name": "generated_at"},
-                ]
-            }
-        },
-        "result": {
-            "data_array": [],
-        },
+        "success": True,
+        "total": 0,
+        "insights": [],
+        "cached": True,
+        "generated_at": "2026-09-03T12:00:00",
     }
-    mock_post.return_value = mock_response
+    mock_get.return_value = mock_response
 
     response = client.get("/ai-insights", headers={"X-API-Key": VALID_TEST_KEY})
 
@@ -341,76 +310,56 @@ def test_ai_insights_empty_cache(mock_post):
     assert len(data["insights"]) == 0
 
 
-@patch("api_gateway.requests.post")
-def test_ai_insights_database_error(mock_post):
-    """Test /ai-insights handles database connection errors"""
+@patch("api_gateway.requests.get")
+def test_ai_insights_file_not_found(mock_get):
+    """Test /ai-insights handles UC Volume file not found (404)"""
     mock_response = MagicMock()
-    mock_response.status_code = 500
-    mock_response.text = "Internal Server Error"
-    mock_post.return_value = mock_response
+    mock_response.status_code = 404
+    mock_get.return_value = mock_response
 
     response = client.get("/ai-insights", headers={"X-API-Key": VALID_TEST_KEY})
 
-    # New behavior: returns 200 with success=false instead of HTTP error
+    # Returns 200 with success=false and helpful message
     assert response.status_code == 200
     data = response.json()
     assert data["success"] is False
-    assert "Database query failed" in data["error"]
+    assert "Cache file not found" in data["error"]
 
 
-@patch("api_gateway.requests.post")
-def test_ai_insights_query_failed(mock_post):
-    """Test /ai-insights handles failed query execution"""
-    mock_response = MagicMock()
-    mock_response.status_code = 200
-    mock_response.json.return_value = {"status": {"state": "FAILED"}, "result": None}
-    mock_post.return_value = mock_response
-
-    response = client.get("/ai-insights", headers={"X-API-Key": VALID_TEST_KEY})
-
-    # New behavior: returns 200 with success=false instead of HTTP error
-    assert response.status_code == 200
-    data = response.json()
-    assert data["success"] is False
-    assert "FAILED" in data["error"]
-
-
-@patch("api_gateway.requests.post")
-def test_ai_insights_connection_timeout(mock_post):
+@patch("api_gateway.requests.get")
+def test_ai_insights_connection_timeout(mock_get):
     """Test /ai-insights handles connection timeouts"""
-    mock_post.side_effect = requests.Timeout("Connection timeout")
+    mock_get.side_effect = requests.Timeout("Connection timeout")
 
     response = client.get("/ai-insights", headers={"X-API-Key": VALID_TEST_KEY})
 
-    # New behavior: returns 200 with success=false instead of HTTP error
+    # Returns 200 with success=false instead of HTTP error
     assert response.status_code == 200
     data = response.json()
     assert data["success"] is False
     assert "timeout" in data["error"].lower()
 
 
-@patch("api_gateway.requests.post")
-def test_ai_insights_malformed_response(mock_post):
-    """Test /ai-insights gracefully handles missing manifest (table doesn't exist or is empty)"""
+@patch("api_gateway.requests.get")
+def test_ai_insights_malformed_response(mock_get):
+    """Test /ai-insights gracefully handles malformed UC Volume JSON"""
     mock_response = MagicMock()
     mock_response.status_code = 200
-    # Has 'result' but missing nested 'manifest' key - will cause KeyError when accessing schema
+    # Missing 'insights' key - will cause validation error
     mock_response.json.return_value = {
-        "status": {"state": "SUCCEEDED"},
-        "result": {"data_array": []}  # Missing 'manifest' key
+        "success": True,
+        "total": 0,
+        # Missing 'insights' key
     }
-    mock_post.return_value = mock_response
+    mock_get.return_value = mock_response
 
     response = client.get("/ai-insights", headers={"X-API-Key": VALID_TEST_KEY})
 
-    # Should gracefully return 200 with empty insights and helpful message
+    # Should gracefully return 200 with error message
     assert response.status_code == 200
     data = response.json()
-    assert data["success"] is True
-    assert data["total"] == 0
-    assert data["insights"] == []
-    assert "message" in data
-    assert "Gemini notebook cells" in data["message"]
+    assert data["success"] is False
+    assert "Invalid cache file format" in data["error"]
 
 
 # =========================================================================
@@ -470,9 +419,9 @@ def test_warmup_endpoint_already_running():
     api_gateway._warmup_status["in_progress"] = False
 
 
-@patch("api_gateway.requests.post")
-def test_ai_insights_cache_hit(mock_post):
-    """Test /ai-insights returns cached data without DB call"""
+@patch("api_gateway.requests.get")
+def test_ai_insights_cache_hit(mock_get):
+    """Test /ai-insights returns cached data without UC Volume call"""
     from datetime import datetime
     
     # Pre-populate cache
@@ -492,7 +441,7 @@ def test_ai_insights_cache_hit(mock_post):
     
     response = client.get("/ai-insights", headers={"X-API-Key": VALID_TEST_KEY})
     
-    # Should return cached data without calling DB
+    # Should return cached data without calling UC Volume
     assert response.status_code == 200
     data = response.json()
     assert data["success"] is True
@@ -500,8 +449,8 @@ def test_ai_insights_cache_hit(mock_post):
     assert data["total"] == 1
     assert data["insights"][0]["scenario_name"] == "Cached Scenario"
     
-    # Verify no DB call was made
-    mock_post.assert_not_called()
+    # Verify no UC Volume call was made
+    mock_get.assert_not_called()
 
 
 @patch("api_gateway.requests.post")
@@ -544,67 +493,35 @@ def test_ai_insights_stale_cache_revalidate(mock_post):
     assert data["insights"][0]["scenario_name"] == "Stale Scenario"
 
 
-@patch("api_gateway.requests.post")
-def test_ai_insights_warehouse_cold_start(mock_post):
-    """Test /ai-insights handles warehouse cold start gracefully"""
-    mock_response = MagicMock()
-    mock_response.status_code = 200  # Fixed: was == (comparison) instead of = (assignment)
-    mock_response.json.return_value = {
-        "status": {"state": "PENDING"}  # Warehouse starting up
-    }
-    mock_post.return_value = mock_response
-    
-    response = client.get("/ai-insights", headers={"X-API-Key": VALID_TEST_KEY})
-    
-    assert response.status_code == 200
-    data = response.json()
-    assert data["success"] is False
-    # Check for cold start indicators in error or message
-    error_or_message = (data.get("error", "") + " " + data.get("message", "")).lower()
-    assert "cold start" in error_or_message or "starting" in error_or_message or "pending" in error_or_message
-    assert "message" in data
+# Test removed: test_ai_insights_warehouse_cold_start
+# No longer relevant - UC Volume has no warehouse cold starts!
 
 
-@patch("api_gateway.requests.post")
-def test_warmup_cache_background_success(mock_post):
-    """Test warmup_cache_background populates cache successfully"""
+@patch("api_gateway.requests.get")
+def test_warmup_cache_background_success(mock_get):
+    """Test warmup_cache_background populates cache successfully from UC Volume"""
     import asyncio
     
-    # Mock successful DB response
+    # Mock successful UC Volume response
     mock_response = MagicMock()
     mock_response.status_code = 200
     mock_response.json.return_value = {
-        "status": {"state": "SUCCEEDED"},
-        "manifest": {
-            "schema": {
-                "columns": [
-                    {"name": "scenario_id"},
-                    {"name": "scenario_name"},
-                    {"name": "ai_provider"},
-                    {"name": "prompt_type"},
-                    {"name": "question"},
-                    {"name": "context_table"},
-                    {"name": "explanation"},
-                    {"name": "generated_at"},
-                ]
+        "success": True,
+        "total": 1,
+        "insights": [
+            {
+                "scenario_id": 1,
+                "scenario_name": "Warmup Scenario",
+                "ai_provider": "Gemini 2.5 Flash",
+                "prompt_type": "test",
+                "question": "Warmup test?",
+                "context_table": "test_table",
+                "explanation": "Warmup explanation",
+                "generated_at": "2026-09-03T12:00:00",
             }
-        },
-        "result": {
-            "data_array": [
-                [
-                    1,
-                    "Warmup Scenario",
-                    "Gemini 2.5 Flash",
-                    "test",
-                    "Warmup test?",
-                    "test_table",
-                    "Warmup explanation",
-                    "2026-09-03T12:00:00",
-                ]
-            ]
-        },
+        ],
     }
-    mock_post.return_value = mock_response
+    mock_get.return_value = mock_response
     
     # Run warmup in event loop
     asyncio.run(api_gateway.warmup_cache_background())
@@ -616,13 +533,13 @@ def test_warmup_cache_background_success(mock_post):
     assert api_gateway._warmup_status["error"] is None
 
 
-@patch("api_gateway.requests.post")
-def test_warmup_cache_background_timeout(mock_post):
+@patch("api_gateway.requests.get")
+def test_warmup_cache_background_timeout(mock_get):
     """Test warmup_cache_background handles timeout gracefully"""
     import asyncio
     
     # Mock timeout
-    mock_post.side_effect = requests.Timeout("Connection timeout")
+    mock_get.side_effect = requests.Timeout("Connection timeout")
     
     # Run warmup in event loop
     asyncio.run(api_gateway.warmup_cache_background())
@@ -633,18 +550,19 @@ def test_warmup_cache_background_timeout(mock_post):
     assert "timeout" in api_gateway._warmup_status["error"].lower()
 
 
-@patch("api_gateway.requests.post")
-def test_warmup_cache_background_warehouse_cold_start(mock_post):
-    """Test warmup_cache_background handles warehouse cold start"""
+# Test removed: test_warmup_cache_background_warehouse_cold_start
+# No longer relevant - UC Volume has no warehouse cold starts!
+
+
+@patch("api_gateway.requests.get")
+def test_warmup_cache_background_http_error(mock_get):
+    """Test warmup_cache_background handles HTTP errors from UC Volume"""
     import asyncio
     
-    # Mock warehouse still starting (PENDING state)
+    # Mock HTTP error (e.g., 404 file not found)
     mock_response = MagicMock()
-    mock_response.status_code = 200
-    mock_response.json.return_value = {
-        "status": {"state": "PENDING"}
-    }
-    mock_post.return_value = mock_response
+    mock_response.status_code = 404
+    mock_get.return_value = mock_response
     
     # Run warmup in event loop
     asyncio.run(api_gateway.warmup_cache_background())
@@ -652,26 +570,7 @@ def test_warmup_cache_background_warehouse_cold_start(mock_post):
     # Verify warmup recorded error but didn't crash
     assert api_gateway._warmup_status["completed"] is False
     assert api_gateway._warmup_status["error"] is not None
-    assert "cold start" in api_gateway._warmup_status["error"].lower()
-
-
-@patch("api_gateway.requests.post")
-def test_warmup_cache_background_http_error(mock_post):
-    """Test warmup_cache_background handles HTTP errors"""
-    import asyncio
-    
-    # Mock HTTP error
-    mock_response = MagicMock()
-    mock_response.status_code = 500
-    mock_post.return_value = mock_response
-    
-    # Run warmup in event loop
-    asyncio.run(api_gateway.warmup_cache_background())
-    
-    # Verify warmup recorded error but didn't crash
-    assert api_gateway._warmup_status["completed"] is False
-    assert api_gateway._warmup_status["error"] is not None
-    assert "500" in api_gateway._warmup_status["error"]
+    assert "404" in api_gateway._warmup_status["error"]
 
 
 def test_warmup_cache_background_skip_if_in_progress():
