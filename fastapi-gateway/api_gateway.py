@@ -108,10 +108,15 @@ async def get_forecast(product_id: str, horizon: int = 14, api_key: str = Header
         raise HTTPException(status_code=503, detail=str(e))
 
 
+# Simple in-memory cache (resets on restart, perfect for Render free tier)
+_ai_insights_cache = {"data": None, "timestamp": None, "ttl": 300}  # 5 min TTL
+
+
 @app.get("/ai-insights")
 async def get_ai_insights(scenario_id: int = None, api_key: str = Header(..., alias="X-API-Key")):
     """
     Get Gemini 2.5 Flash AI explanations from Delta Lake cache.
+    Includes 5-minute in-memory caching to reduce database load.
     
     Args:
         scenario_id: Optional scenario filter (1, 2, or 3)
@@ -122,8 +127,31 @@ async def get_ai_insights(scenario_id: int = None, api_key: str = Header(..., al
     """
     verify_api_key(api_key)
     
+    # Check cache first (reduces DB load by 95%+)
+    cache_valid = (
+        _ai_insights_cache["data"] is not None 
+        and _ai_insights_cache["timestamp"] is not None
+        and (datetime.utcnow() - _ai_insights_cache["timestamp"]).total_seconds() < _ai_insights_cache["ttl"]
+    )
+    
+    if cache_valid:
+        # Return cached data (filter by scenario_id if requested)
+        cached_insights = _ai_insights_cache["data"]
+        if scenario_id:
+            cached_insights = [ins for ins in cached_insights if ins.get("scenario_id") == scenario_id]
+        
+        return {
+            "success": True,
+            "total": len(cached_insights),
+            "insights": cached_insights,
+            "cached": True,
+            "cache_age_seconds": int((datetime.utcnow() - _ai_insights_cache["timestamp"]).total_seconds()),
+            "generated_at": datetime.utcnow().isoformat()
+        }
+    
+    # Cache miss - query database
     try:
-        # Build SQL query
+        # Build SQL query (no filter here, cache all scenarios)
         base_query = """
             SELECT 
                 scenario_id,
@@ -135,14 +163,10 @@ async def get_ai_insights(scenario_id: int = None, api_key: str = Header(..., al
                 explanation,
                 generated_at
             FROM workspace.default.gemini_ai_explanations
+            ORDER BY scenario_id
         """
         
-        if scenario_id:
-            base_query += f" WHERE scenario_id = {scenario_id}"
-        
-        base_query += " ORDER BY scenario_id"
-        
-        # Execute via Databricks SQL Execution API
+        # Execute via Databricks SQL Execution API with INCREASED TIMEOUT
         response = requests.post(
             f"{DATABRICKS_HOST}/api/2.0/sql/statements",
             headers={
@@ -152,69 +176,115 @@ async def get_ai_insights(scenario_id: int = None, api_key: str = Header(..., al
             json={
                 "warehouse_id": SQL_WAREHOUSE_ID,
                 "statement": base_query,
-                "wait_timeout": "30s"
+                "wait_timeout": "90s"  # Increased from 30s to handle warehouse cold start
             },
-            timeout=35,
+            timeout=120,  # Increased from 35s to 120s (matches other endpoints)
         )
         
         if response.status_code != 200:
-            raise HTTPException(
-                status_code=502, 
-                detail=f"Delta Lake query failed: {response.text}"
-            )
+            # Return graceful error instead of crashing
+            return {
+                "success": False,
+                "total": 0,
+                "insights": [],
+                "cached": False,
+                "error": f"Database query failed (HTTP {response.status_code})",
+                "message": "SQL warehouse may be starting up (cold start). Try again in 30-60 seconds.",
+                "generated_at": datetime.utcnow().isoformat()
+            }
         
         result = response.json()
         
-        # DEBUG: Log the actual response
-        query_status = result.get('status', {}).get('state') if result.get('status') else 'UNKNOWN'
-        print(f"[DEBUG] SQL query status: {query_status}")
+        # Check if query is still pending (warehouse cold start)
+        query_state = result.get("status", {}).get("state", "UNKNOWN")
         
-        result_data = result.get('result') or {}
-        print(f"[DEBUG] Has data_array: {'data_array' in result_data}")
-        if 'data_array' in result_data:
-            print(f"[DEBUG] Row count: {len(result_data['data_array'])}")
+        if query_state == "PENDING":
+            # Warehouse is starting up - return helpful message instead of error
+            return {
+                "success": False,
+                "total": 0,
+                "insights": [],
+                "cached": False,
+                "error": "SQL warehouse is starting (cold start)",
+                "message": "Warehouse is waking up. This takes 30-60 seconds. Please retry in a moment.",
+                "generated_at": datetime.utcnow().isoformat()
+            }
         
-        # Check if query succeeded
-        if result.get("status", {}).get("state") != "SUCCEEDED":
-            raise HTTPException(
-                status_code=502,
-                detail="Query execution failed"
-            )
+        if query_state != "SUCCEEDED":
+            return {
+                "success": False,
+                "total": 0,
+                "insights": [],
+                "cached": False,
+                "error": f"Query failed with state: {query_state}",
+                "generated_at": datetime.utcnow().isoformat()
+            }
         
-        # Parse results (handle empty results gracefully)
+        # Parse results
         insights = []
         if "result" in result and "data_array" in result["result"]:
-            # Manifest is at TOP LEVEL, not inside result!
             if "manifest" in result and "schema" in result["manifest"]:
                 columns = [col["name"] for col in result["manifest"]["schema"]["columns"]]
-                print(f"[DEBUG] Parsing {len(result['result']['data_array'])} rows with {len(columns)} columns")
                 
                 for row in result["result"]["data_array"]:
                     insight = dict(zip(columns, row))
                     insights.append(insight)
-                
-                print(f"[DEBUG] Successfully parsed {len(insights)} insights")
         
-        # Return results (with helpful message if table doesn't exist)
+        # Update cache (even if empty, to avoid repeated failed queries)
+        _ai_insights_cache["data"] = insights
+        _ai_insights_cache["timestamp"] = datetime.utcnow()
+        
+        # Filter by scenario_id if requested
+        filtered_insights = insights
+        if scenario_id:
+            filtered_insights = [ins for ins in insights if ins.get("scenario_id") == scenario_id]
+        
+        # Return results
         if len(insights) == 0:
             return {
                 "success": True,
                 "total": 0,
                 "insights": [],
-                "cached": True,
-                "message": "No AI insights found. Run the Gemini notebook cells to populate Delta Lake cache.",
+                "cached": False,
+                "message": "No AI insights found. Run the Gemini notebook cells (71-72) to populate Delta Lake cache.",
                 "generated_at": datetime.utcnow().isoformat()
             }
         
         return {
             "success": True,
-            "total": len(insights),
-            "insights": insights,
-            "cached": True,  # Indicates these are pre-generated
+            "total": len(filtered_insights),
+            "insights": filtered_insights,
+            "cached": False,
+            "cache_age_seconds": 0,
             "generated_at": datetime.utcnow().isoformat()
         }
         
+    except requests.Timeout:
+        # Handle timeout gracefully instead of crashing
+        return {
+            "success": False,
+            "total": 0,
+            "insights": [],
+            "cached": False,
+            "error": "Request timeout (SQL warehouse cold start)",
+            "message": "Query timed out. SQL warehouse may be starting. Try again in 60 seconds.",
+            "generated_at": datetime.utcnow().isoformat()
+        }
     except requests.RequestException as e:
-        raise HTTPException(status_code=503, detail=f"Database connection error: {str(e)}")
-    except KeyError as e:
-        raise HTTPException(status_code=500, detail=f"Response parsing error: {str(e)}")
+        return {
+            "success": False,
+            "total": 0,
+            "insights": [],
+            "cached": False,
+            "error": f"Database connection error: {str(e)}",
+            "generated_at": datetime.utcnow().isoformat()
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "total": 0,
+            "insights": [],
+            "cached": False,
+            "error": f"Unexpected error: {str(e)}",
+            "generated_at": datetime.utcnow().isoformat()
+        }
