@@ -74,3 +74,24 @@ def test_stock_recommendation_signature(mock_streamlit):
     assert "forecast" in params
     assert "lead_time_days" in params
     assert "safety_factor" in params
+
+
+def test_new_gemini_tab_import(mock_streamlit):
+    """Test that render_gemini_tab is imported in app.py"""
+    # Import all tab functions from components.tabs
+    from components.tabs import (
+        render_forecast_tab,
+        render_data_tab,
+        render_stock_tab,
+        render_insights_tab,
+        render_gemini_tab,
+        render_welcome_screen
+    )
+    
+    # Verify all are callable
+    assert callable(render_forecast_tab)
+    assert callable(render_data_tab)
+    assert callable(render_stock_tab)
+    assert callable(render_insights_tab)
+    assert callable(render_gemini_tab)  # NEW - separate tab for Gemini insights
+    assert callable(render_welcome_screen)
