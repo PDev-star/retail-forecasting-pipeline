@@ -95,10 +95,8 @@ def test_render_forecast_tab_new_signature():
                     scenario_type="Normal"
                 )
                 
-                # Verify chart was rendered
+                # Verify chart was rendered (metrics are now in the chart, not in the tab)
                 assert mock_chart.called
-                # Verify st.columns was called with 4
-                mock_st.columns.assert_called_with(4)
                 # Should return the mocked DataFrame
                 assert df_result is not None
                 assert df_result == mock_df
