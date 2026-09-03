@@ -34,6 +34,12 @@ def mock_env_vars(monkeypatch):
     # Clear cache between tests to avoid pollution
     api_gateway._ai_insights_cache["data"] = None
     api_gateway._ai_insights_cache["timestamp"] = None
+    
+    # Clear warmup status between tests
+    api_gateway._warmup_status["completed"] = False
+    api_gateway._warmup_status["in_progress"] = False
+    api_gateway._warmup_status["last_attempt"] = None
+    api_gateway._warmup_status["error"] = None
 
 
 def test_root_endpoint():
@@ -47,12 +53,18 @@ def test_root_endpoint():
 
 
 def test_health_endpoint():
-    """Test health check endpoint"""
+    """Test health check endpoint with new cache status fields"""
     response = client.get("/health")
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "healthy"
     assert "timestamp" in data
+    # New fields from warmup implementation
+    assert "cache_populated" in data
+    assert "cache_size" in data
+    assert "warmup_completed" in data
+    assert isinstance(data["cache_populated"], bool)
+    assert isinstance(data["cache_size"], int)
 
 
 def test_list_products():
@@ -399,3 +411,279 @@ def test_ai_insights_malformed_response(mock_post):
     assert data["insights"] == []
     assert "message" in data
     assert "Gemini notebook cells" in data["message"]
+
+
+# =========================================================================
+# TESTS FOR NEW WARMUP ENDPOINTS (CACHE-STATUS, WARMUP, STARTUP)
+# =========================================================================
+
+def test_cache_status_endpoint():
+    """Test /cache-status endpoint returns cache and warmup info"""
+    response = client.get("/cache-status")
+    assert response.status_code == 200
+    data = response.json()
+    
+    # Verify response structure
+    assert "cache" in data
+    assert "warmup" in data
+    assert "timestamp" in data
+    
+    # Cache fields
+    assert "populated" in data["cache"]
+    assert "size" in data["cache"]
+    assert "age_seconds" in data["cache"]
+    assert "ttl_seconds" in data["cache"]
+    assert "expires_in_seconds" in data["cache"]
+    
+    # Warmup fields
+    assert "completed" in data["warmup"]
+    assert "in_progress" in data["warmup"]
+    assert "last_attempt" in data["warmup"]
+    assert "error" in data["warmup"]
+
+
+def test_warmup_endpoint_trigger():
+    """Test /warmup endpoint triggers background warmup"""
+    response = client.get("/warmup")
+    assert response.status_code == 200
+    data = response.json()
+    
+    # Should indicate warmup was triggered
+    assert "status" in data
+    assert data["status"] in ["triggered", "already_running"]
+    assert "message" in data
+
+
+def test_warmup_endpoint_already_running():
+    """Test /warmup endpoint when warmup is already in progress"""
+    # Set warmup to in_progress
+    api_gateway._warmup_status["in_progress"] = True
+    
+    response = client.get("/warmup")
+    assert response.status_code == 200
+    data = response.json()
+    
+    assert data["status"] == "already_running"
+    assert "already in progress" in data["message"].lower()
+    
+    # Clean up
+    api_gateway._warmup_status["in_progress"] = False
+
+
+@patch("api_gateway.requests.post")
+def test_ai_insights_cache_hit(mock_post):
+    """Test /ai-insights returns cached data without DB call"""
+    from datetime import datetime
+    
+    # Pre-populate cache
+    api_gateway._ai_insights_cache["data"] = [
+        {
+            "scenario_id": 1,
+            "scenario_name": "Cached Scenario",
+            "ai_provider": "Gemini 2.5 Flash",
+            "prompt_type": "test",
+            "question": "Test question?",
+            "context_table": "test_table",
+            "explanation": "Cached explanation",
+            "generated_at": "2026-09-03T12:00:00"
+        }
+    ]
+    api_gateway._ai_insights_cache["timestamp"] = datetime.utcnow()
+    
+    response = client.get("/ai-insights", headers={"X-API-Key": VALID_TEST_KEY})
+    
+    # Should return cached data without calling DB
+    assert response.status_code == 200
+    data = response.json()
+    assert data["success"] is True
+    assert data["cached"] is True
+    assert data["total"] == 1
+    assert data["insights"][0]["scenario_name"] == "Cached Scenario"
+    
+    # Verify no DB call was made
+    mock_post.assert_not_called()
+
+
+@patch("api_gateway.requests.post")
+def test_ai_insights_stale_cache_revalidate(mock_post):
+    """Test stale-while-revalidate: returns stale data, fetches fresh in background"""
+    from datetime import datetime, timedelta
+    
+    # Pre-populate cache with stale data (7 minutes old, > 5 min TTL but < 1 hr stale_ttl)
+    api_gateway._ai_insights_cache["data"] = [
+        {
+            "scenario_id": 1,
+            "scenario_name": "Stale Scenario",
+            "ai_provider": "Gemini 2.5 Flash",
+            "prompt_type": "test",
+            "question": "Old question?",
+            "context_table": "test_table",
+            "explanation": "Stale explanation",
+            "generated_at": "2026-09-03T12:00:00"
+        }
+    ]
+    api_gateway._ai_insights_cache["timestamp"] = datetime.utcnow() - timedelta(minutes=7)
+    
+    # Mock fast-failing DB call (warehouse cold start)
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = {
+        "status": {"state": "PENDING"}  # Warehouse still warming up
+    }
+    mock_post.return_value = mock_response
+    
+    response = client.get("/ai-insights", headers={"X-API-Key": VALID_TEST_KEY})
+    
+    # Should return stale cached data immediately
+    assert response.status_code == 200
+    data = response.json()
+    assert data["success"] is True
+    assert data["cached"] is True
+    assert data["stale"] is True  # Indicates stale-while-revalidate
+    assert "Serving cached data" in data.get("message", "")
+    assert data["insights"][0]["scenario_name"] == "Stale Scenario"
+
+
+@patch("api_gateway.requests.post")
+def test_ai_insights_warehouse_cold_start(mock_post):
+    """Test /ai-insights handles warehouse cold start gracefully"""
+    mock_response = MagicMock()
+    mock_response.status_code == 200
+    mock_response.json.return_value = {
+        "status": {"state": "PENDING"}  # Warehouse starting up
+    }
+    mock_post.return_value = mock_response
+    
+    response = client.get("/ai-insights", headers={"X-API-Key": VALID_TEST_KEY})
+    
+    assert response.status_code == 200
+    data = response.json()
+    assert data["success"] is False
+    assert "cold start" in data.get("error", "").lower() or "starting" in data.get("error", "").lower()
+    assert "message" in data
+
+
+@patch("api_gateway.requests.post")
+def test_warmup_cache_background_success(mock_post):
+    """Test warmup_cache_background populates cache successfully"""
+    import asyncio
+    
+    # Mock successful DB response
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = {
+        "status": {"state": "SUCCEEDED"},
+        "manifest": {
+            "schema": {
+                "columns": [
+                    {"name": "scenario_id"},
+                    {"name": "scenario_name"},
+                    {"name": "ai_provider"},
+                    {"name": "prompt_type"},
+                    {"name": "question"},
+                    {"name": "context_table"},
+                    {"name": "explanation"},
+                    {"name": "generated_at"},
+                ]
+            }
+        },
+        "result": {
+            "data_array": [
+                [
+                    1,
+                    "Warmup Scenario",
+                    "Gemini 2.5 Flash",
+                    "test",
+                    "Warmup test?",
+                    "test_table",
+                    "Warmup explanation",
+                    "2026-09-03T12:00:00",
+                ]
+            ]
+        },
+    }
+    mock_post.return_value = mock_response
+    
+    # Run warmup in event loop
+    asyncio.run(api_gateway.warmup_cache_background())
+    
+    # Verify cache was populated
+    assert api_gateway._ai_insights_cache["data"] is not None
+    assert len(api_gateway._ai_insights_cache["data"]) == 1
+    assert api_gateway._warmup_status["completed"] is True
+    assert api_gateway._warmup_status["error"] is None
+
+
+@patch("api_gateway.requests.post")
+def test_warmup_cache_background_timeout(mock_post):
+    """Test warmup_cache_background handles timeout gracefully"""
+    import asyncio
+    
+    # Mock timeout
+    mock_post.side_effect = requests.Timeout("Connection timeout")
+    
+    # Run warmup in event loop
+    asyncio.run(api_gateway.warmup_cache_background())
+    
+    # Verify warmup recorded error but didn't crash
+    assert api_gateway._warmup_status["completed"] is False
+    assert api_gateway._warmup_status["error"] is not None
+    assert "timeout" in api_gateway._warmup_status["error"].lower()
+
+
+@patch("api_gateway.requests.post")
+def test_warmup_cache_background_warehouse_cold_start(mock_post):
+    """Test warmup_cache_background handles warehouse cold start"""
+    import asyncio
+    
+    # Mock warehouse still starting (PENDING state)
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = {
+        "status": {"state": "PENDING"}
+    }
+    mock_post.return_value = mock_response
+    
+    # Run warmup in event loop
+    asyncio.run(api_gateway.warmup_cache_background())
+    
+    # Verify warmup recorded error but didn't crash
+    assert api_gateway._warmup_status["completed"] is False
+    assert api_gateway._warmup_status["error"] is not None
+    assert "cold start" in api_gateway._warmup_status["error"].lower()
+
+
+@patch("api_gateway.requests.post")
+def test_warmup_cache_background_http_error(mock_post):
+    """Test warmup_cache_background handles HTTP errors"""
+    import asyncio
+    
+    # Mock HTTP error
+    mock_response = MagicMock()
+    mock_response.status_code = 500
+    mock_post.return_value = mock_response
+    
+    # Run warmup in event loop
+    asyncio.run(api_gateway.warmup_cache_background())
+    
+    # Verify warmup recorded error but didn't crash
+    assert api_gateway._warmup_status["completed"] is False
+    assert api_gateway._warmup_status["error"] is not None
+    assert "500" in api_gateway._warmup_status["error"]
+
+
+def test_warmup_cache_background_skip_if_in_progress():
+    """Test warmup_cache_background skips if already running"""
+    import asyncio
+    
+    # Set warmup to in_progress
+    api_gateway._warmup_status["in_progress"] = True
+    
+    # Run warmup - should return immediately
+    asyncio.run(api_gateway.warmup_cache_background())
+    
+    # Should still be in_progress (no state change)
+    assert api_gateway._warmup_status["in_progress"] is True
+    
+    # Clean up
+    api_gateway._warmup_status["in_progress"] = False
