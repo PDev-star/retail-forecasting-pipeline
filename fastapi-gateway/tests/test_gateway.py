@@ -30,6 +30,10 @@ def mock_env_vars(monkeypatch):
     
     # FIXED: Update the VALID_API_KEYS set that's already been loaded
     api_gateway.VALID_API_KEYS = {VALID_TEST_KEY}
+    
+    # Clear cache between tests to avoid pollution
+    api_gateway._ai_insights_cache["data"] = None
+    api_gateway._ai_insights_cache["timestamp"] = None
 
 
 def test_root_endpoint():
@@ -231,7 +235,7 @@ def test_ai_insights_success(mock_post):
     assert data["success"] is True
     assert data["total"] == 3
     assert len(data["insights"]) == 3
-    assert data["cached"] is True
+    assert data["cached"] is False  # First call is not cached
     assert "generated_at" in data
 
     # Verify first insight
@@ -335,8 +339,11 @@ def test_ai_insights_database_error(mock_post):
 
     response = client.get("/ai-insights", headers={"X-API-Key": VALID_TEST_KEY})
 
-    assert response.status_code == 502
-    assert "Delta Lake query failed" in response.json()["detail"]
+    # New behavior: returns 200 with success=false instead of HTTP error
+    assert response.status_code == 200
+    data = response.json()
+    assert data["success"] is False
+    assert "Database query failed" in data["error"]
 
 
 @patch("api_gateway.requests.post")
@@ -349,8 +356,11 @@ def test_ai_insights_query_failed(mock_post):
 
     response = client.get("/ai-insights", headers={"X-API-Key": VALID_TEST_KEY})
 
-    assert response.status_code == 502
-    assert "execution failed" in response.json()["detail"]
+    # New behavior: returns 200 with success=false instead of HTTP error
+    assert response.status_code == 200
+    data = response.json()
+    assert data["success"] is False
+    assert "FAILED" in data["error"]
 
 
 @patch("api_gateway.requests.post")
@@ -360,8 +370,11 @@ def test_ai_insights_connection_timeout(mock_post):
 
     response = client.get("/ai-insights", headers={"X-API-Key": VALID_TEST_KEY})
 
-    assert response.status_code == 503
-    assert "connection error" in response.json()["detail"].lower()
+    # New behavior: returns 200 with success=false instead of HTTP error
+    assert response.status_code == 200
+    data = response.json()
+    assert data["success"] is False
+    assert "timeout" in data["error"].lower()
 
 
 @patch("api_gateway.requests.post")
