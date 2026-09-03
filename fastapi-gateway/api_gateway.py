@@ -88,7 +88,7 @@ async def get_forecast(product_id: str, horizon: int = 14, api_key: str = Header
                 "Content-Type": "application/json",
             },
             json={"dataframe_records": [{"h": horizon}]},
-            timeout=60,
+            timeout=120  # Increased for serverless cold starts (scale-to-zero),
         )
 
         if response.status_code != 200:
