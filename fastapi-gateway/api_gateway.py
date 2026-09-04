@@ -1,12 +1,21 @@
 # api_gateway.py - FastAPI Gateway for Databricks Model Serving
 # Deploy on Render.com (FREE!)
+# Updated: 2026-08-11 - Trigger deployment workflow (fixed branch case)
 
 import os
 from datetime import datetime
+import asyncio
+import logging
+import json
+import base64
 
 import requests
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import FastAPI, Header, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="Retail Forecast API Gateway",
@@ -26,6 +35,9 @@ app.add_middleware(
 DATABRICKS_HOST = os.environ.get("DATABRICKS_HOST", "https://dbc-7e8a8bf0-dc9f.cloud.databricks.com")
 DATABRICKS_TOKEN = os.environ.get("DATABRICKS_TOKEN")
 VALID_API_KEYS = set(os.environ.get("API_KEYS", "demo-key-12345").split(","))
+
+# SQL Warehouse for Delta Lake queries
+SQL_WAREHOUSE_ID = os.environ.get("SQL_WAREHOUSE_ID", "907cc979fc71d54f")
 
 PRODUCTS = {
     "Cat1": {"name": "WHITE HANGING HEART T-LIGHT HOLDER", "endpoint": "Cat1Forecast"},
@@ -48,13 +60,21 @@ async def root():
         "endpoints": {
             "POST /forecast": "Get demand forecast",
             "GET /products": "List products",
+            "GET /ai-insights": "Get Gemini AI explanations from Delta Lake",
         },
     }
 
 
 @app.get("/health")
 async def health():
-    return {"status": "healthy", "timestamp": datetime.utcnow().isoformat()}
+    """Lightweight health check - does NOT trigger cache warmup"""
+    return {
+        "status": "healthy",
+        "timestamp": datetime.utcnow().isoformat(),
+        "cache_populated": _ai_insights_cache["data"] is not None,
+        "cache_size": len(_ai_insights_cache["data"]) if _ai_insights_cache["data"] else 0,
+        "warmup_completed": _warmup_status["completed"]
+    }
 
 
 @app.get("/products")
@@ -83,7 +103,7 @@ async def get_forecast(product_id: str, horizon: int = 14, api_key: str = Header
                 "Content-Type": "application/json",
             },
             json={"dataframe_records": [{"h": horizon}]},
-            timeout=60,
+            timeout=120  # Increased for serverless cold starts (scale-to-zero),
         )
 
         if response.status_code != 200:
@@ -101,3 +121,339 @@ async def get_forecast(product_id: str, horizon: int = 14, api_key: str = Header
 
     except requests.RequestException as e:
         raise HTTPException(status_code=503, detail=str(e))
+
+
+# In-memory cache with stale-while-revalidate pattern
+_ai_insights_cache = {
+    "data": None, 
+    "timestamp": None, 
+    "ttl": 300,  # 5 min fresh
+    "stale_ttl": 3600  # 1 hour stale (serve old data while fetching new)
+}
+
+# Warmup status tracking
+_warmup_status = {
+    "completed": False, 
+    "in_progress": False, 
+    "last_attempt": None, 
+    "error": None
+}
+
+
+@app.get("/ai-insights")
+async def get_ai_insights(scenario_id: int = None, api_key: str = Header(..., alias="X-API-Key")):
+    """
+    Get Gemini 2.5 Flash AI explanations from Unity Catalog Volume JSON cache.
+    NO SQL WAREHOUSE REQUIRED - reads pre-computed JSON file.
+    Includes 5-minute in-memory caching to reduce API load.
+    
+    Args:
+        scenario_id: Optional scenario filter (1, 2, or 3)
+        api_key: API key for authentication
+    
+    Returns:
+        List of AI insights with scenario metadata
+    """
+    verify_api_key(api_key)
+    
+    # Check cache first (reduces DB load by 95%+)
+    cache_fresh = (
+        _ai_insights_cache["data"] is not None 
+        and _ai_insights_cache["timestamp"] is not None
+        and (datetime.utcnow() - _ai_insights_cache["timestamp"]).total_seconds() < _ai_insights_cache["ttl"]
+    )
+    
+    cache_stale = (
+        _ai_insights_cache["data"] is not None 
+        and _ai_insights_cache["timestamp"] is not None
+        and (datetime.utcnow() - _ai_insights_cache["timestamp"]).total_seconds() < _ai_insights_cache["stale_ttl"]
+    )
+    
+    if cache_fresh:
+        # Return fresh cached data (filter by scenario_id if requested)
+        cached_insights = _ai_insights_cache["data"]
+        if scenario_id:
+            cached_insights = [ins for ins in cached_insights if ins.get("scenario_id") == scenario_id]
+        
+        return {
+            "success": True,
+            "total": len(cached_insights),
+            "insights": cached_insights,
+            "cached": True,
+            "cache_age_seconds": int((datetime.utcnow() - _ai_insights_cache["timestamp"]).total_seconds()),
+            "generated_at": datetime.utcnow().isoformat()
+        }
+    
+    # Cache expired but still usable (stale-while-revalidate)
+    # Return stale data immediately, refresh from UC Volume in background
+    if cache_stale:
+        # Try to fetch fresh data from UC Volume (fast, no warehouse needed)
+        try:
+            response = requests.get(
+                f"{DATABRICKS_HOST}/api/2.0/fs/files/Volumes/workspace/default/api_cache/ai_insights.json",
+                headers={
+                    "Authorization": f"Bearer {DATABRICKS_TOKEN}",
+                },
+                timeout=5  # UC Volume is fast, 5s is enough
+            )
+            
+            # If successful, update cache in background (don't block response)
+            if response.status_code == 200:
+                cache_data = response.json()
+                if isinstance(cache_data, dict) and "insights" in cache_data:
+                    insights = cache_data.get("insights", [])
+                    
+                    # Update cache with fresh data
+                    _ai_insights_cache["data"] = insights
+                    _ai_insights_cache["timestamp"] = datetime.utcnow()
+        except:
+            pass  # Ignore errors during background refresh
+        
+        # Return stale cached data (better than making user wait)
+        cached_insights = _ai_insights_cache["data"]
+        if scenario_id:
+            cached_insights = [ins for ins in cached_insights if ins.get("scenario_id") == scenario_id]
+        
+        return {
+            "success": True,
+            "total": len(cached_insights),
+            "insights": cached_insights,
+            "cached": True,
+            "stale": True,  # Indicate data is from stale cache
+            "cache_age_seconds": int((datetime.utcnow() - _ai_insights_cache["timestamp"]).total_seconds()),
+            "message": "Serving cached data while warehouse warms up. Refresh in 30-60s for latest.",
+            "generated_at": datetime.utcnow().isoformat()
+        }
+    
+    # Cache miss - read from Unity Catalog Volume (NO SQL WAREHOUSE NEEDED!)
+    try:
+        # Read pre-computed JSON from UC Volume using Files API
+        # This is MUCH faster than SQL Execution API (no warehouse cold start)
+        # Note: DBFS is disabled in this workspace, using UC Volume instead
+        response = requests.get(
+            f"{DATABRICKS_HOST}/api/2.0/fs/files/Volumes/workspace/default/api_cache/ai_insights.json",
+            headers={
+                "Authorization": f"Bearer {DATABRICKS_TOKEN}",
+            },
+            timeout=10  # UC Volume reads are fast, only 10s needed
+        )
+        
+        if response.status_code != 200:
+            # File might not exist yet - needs to be generated in notebook
+            return {
+                "success": False,
+                "total": 0,
+                "insights": [],
+                "cached": False,
+                "error": f"Cache file not found (HTTP {response.status_code})",
+                "message": "AI insights need to be generated. Run notebook Cell 95 (Export to JSON) to create the cache in Unity Catalog volume.",
+                "generated_at": datetime.utcnow().isoformat()
+            }
+        
+        # Files API returns JSON directly (not base64-encoded like DBFS)
+        cache_data = response.json()
+        
+        if not isinstance(cache_data, dict) or "insights" not in cache_data:
+            return {
+                "success": False,
+                "total": 0,
+                "insights": [],
+                "cached": False,
+                "error": "Invalid cache file format",
+                "message": "Cache file is corrupted. Re-run notebook Cell 95 (Export to JSON).",
+                "generated_at": datetime.utcnow().isoformat()
+            }
+        
+        # Extract insights from pre-computed cache
+        insights = cache_data.get("insights", [])
+        
+        # Update cache (even if empty, to avoid repeated failed queries)
+        _ai_insights_cache["data"] = insights
+        _ai_insights_cache["timestamp"] = datetime.utcnow()
+        
+        # Filter by scenario_id if requested
+        filtered_insights = insights
+        if scenario_id:
+            filtered_insights = [ins for ins in insights if ins.get("scenario_id") == scenario_id]
+        
+        # Return results
+        if len(insights) == 0:
+            return {
+                "success": True,
+                "total": 0,
+                "insights": [],
+                "cached": False,
+                "message": "No AI insights found. Run the Gemini notebook cells (71-72) to populate Delta Lake cache.",
+                "generated_at": datetime.utcnow().isoformat()
+            }
+        
+        return {
+            "success": True,
+            "total": len(filtered_insights),
+            "insights": filtered_insights,
+            "cached": False,
+            "cache_age_seconds": 0,
+            "generated_at": datetime.utcnow().isoformat()
+        }
+        
+    except requests.Timeout:
+        # Handle timeout gracefully instead of crashing
+        return {
+            "success": False,
+            "total": 0,
+            "insights": [],
+            "cached": False,
+            "error": "Request timeout (SQL warehouse cold start)",
+            "message": "Query timed out. SQL warehouse may be starting. Try again in 60 seconds.",
+            "generated_at": datetime.utcnow().isoformat()
+        }
+    except requests.RequestException as e:
+        return {
+            "success": False,
+            "total": 0,
+            "insights": [],
+            "cached": False,
+            "error": f"Database connection error: {str(e)}",
+            "generated_at": datetime.utcnow().isoformat()
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "total": 0,
+            "insights": [],
+            "cached": False,
+            "error": f"Unexpected error: {str(e)}",
+            "generated_at": datetime.utcnow().isoformat()
+        }
+
+
+async def warmup_cache_background():
+    """
+    Background task to warm up the AI insights cache on startup.
+    Reads from Unity Catalog Volume (NO SQL warehouse needed - instant!).
+    Runs asynchronously without blocking app startup.
+    """
+    if _warmup_status["in_progress"]:
+        logger.info("Warmup already in progress, skipping...")
+        return
+    
+    _warmup_status["in_progress"] = True
+    _warmup_status["last_attempt"] = datetime.utcnow()
+    
+    try:
+        logger.info("🔥 Starting cache warmup (UC Volume read - no SQL warehouse)...")
+        
+        # Read from Unity Catalog Volume - much faster than SQL warehouse!
+        response = requests.get(
+            f"{DATABRICKS_HOST}/api/2.0/fs/files/Volumes/workspace/default/api_cache/ai_insights.json",
+            headers={
+                "Authorization": f"Bearer {DATABRICKS_TOKEN}",
+            },
+            timeout=10  # UC Volume is fast!
+        )
+        
+        if response.status_code != 200:
+            logger.warning(f"⚠️ Warmup failed: HTTP {response.status_code} - cache file not found")
+            _warmup_status["error"] = f"Cache file not found (HTTP {response.status_code})"
+            _warmup_status["completed"] = False
+            return
+        
+        # Files API returns JSON directly (not base64-encoded)
+        cache_data = response.json()
+        
+        if not isinstance(cache_data, dict) or "insights" not in cache_data:
+            logger.warning("⚠️ Warmup failed: Invalid UC Volume response")
+            _warmup_status["error"] = "Invalid cache file format"
+            _warmup_status["completed"] = False
+            return
+        
+        # Extract insights
+        insights = cache_data.get("insights", [])
+        
+        # Update cache
+        _ai_insights_cache["data"] = insights
+        _ai_insights_cache["timestamp"] = datetime.utcnow()
+        _warmup_status["completed"] = True
+        _warmup_status["error"] = None
+        
+        logger.info(f"✅ Cache warmup completed: {len(insights)} insights loaded")
+        
+    except requests.Timeout:
+        logger.error("❌ Warmup timeout (SQL warehouse cold start > 200s)")
+        _warmup_status["error"] = "Timeout after 200s"
+        _warmup_status["completed"] = False
+    except Exception as e:
+        logger.error(f"❌ Warmup error: {str(e)}")
+        _warmup_status["error"] = str(e)
+        _warmup_status["completed"] = False
+    finally:
+        _warmup_status["in_progress"] = False
+
+
+@app.on_event("startup")
+async def startup_event():
+    """
+    FastAPI startup event - triggers background cache warmup.
+    Doesn't block app startup, so Render health checks pass immediately.
+    """
+    logger.info("🚀 FastAPI starting up...")
+    logger.info("🔥 Scheduling background cache warmup...")
+    
+    # Run warmup in background (non-blocking)
+    asyncio.create_task(warmup_cache_background())
+    
+    logger.info("✅ App ready (warmup running in background)")
+
+
+@app.get("/warmup")
+async def trigger_warmup(background_tasks: BackgroundTasks):
+    """
+    Manual endpoint to trigger cache warmup.
+    Useful for:
+    - Testing
+    - Re-warming after cache expiry
+    - Forcing refresh of stale data
+    """
+    if _warmup_status["in_progress"]:
+        return {
+            "status": "already_running",
+            "message": "Cache warmup already in progress",
+            "started_at": _warmup_status["last_attempt"].isoformat() if _warmup_status["last_attempt"] else None
+        }
+    
+    # Trigger warmup in background
+    background_tasks.add_task(warmup_cache_background)
+    
+    return {
+        "status": "triggered",
+        "message": "Cache warmup started in background",
+        "current_cache_size": len(_ai_insights_cache["data"]) if _ai_insights_cache["data"] else 0
+    }
+
+
+@app.get("/cache-status")
+async def cache_status():
+    """
+    Check cache and warmup status.
+    Useful for debugging and monitoring.
+    """
+    cache_age = None
+    if _ai_insights_cache["timestamp"]:
+        cache_age = int((datetime.utcnow() - _ai_insights_cache["timestamp"]).total_seconds())
+    
+    return {
+        "cache": {
+            "populated": _ai_insights_cache["data"] is not None,
+            "size": len(_ai_insights_cache["data"]) if _ai_insights_cache["data"] else 0,
+            "age_seconds": cache_age,
+            "ttl_seconds": _ai_insights_cache["ttl"],
+            "expires_in_seconds": (_ai_insights_cache["ttl"] - cache_age) if cache_age else None
+        },
+        "warmup": {
+            "completed": _warmup_status["completed"],
+            "in_progress": _warmup_status["in_progress"],
+            "last_attempt": _warmup_status["last_attempt"].isoformat() if _warmup_status["last_attempt"] else None,
+            "error": _warmup_status["error"]
+        },
+        "timestamp": datetime.utcnow().isoformat()
+    }

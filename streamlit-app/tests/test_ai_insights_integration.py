@@ -54,6 +54,12 @@ class MockStreamlit:
     
     def warning(self, text):
         self.write_calls.append(text)
+    
+    def caption(self, text):
+        self.write_calls.append(text)
+    
+    def error(self, text):
+        self.write_calls.append(text)
 
 
 # Patch streamlit before importing tabs
@@ -244,3 +250,30 @@ def test_render_insights_tab_custom_qna_button_not_clicked():
                         
                         # Custom AI should NOT be called (button not clicked)
                         mock_custom.assert_not_called()
+
+
+def test_render_insights_tab_groq_only():
+    """Test that insights tab now shows only Groq (Gemini moved to separate tab)."""
+    forecast = [100, 110, 120]
+    product = {'name': 'Test', 'sku': 'T1', 'product_id': 'p1'}
+    scenario_desc = 'Test'
+    lead_time_days = 5
+    
+    mock_st_local = MockStreamlit()
+    
+    with patch('components.tabs.st', mock_st_local):
+        with patch('utils.ai_insights_groq.get_forecast_insight', return_value="Groq insight"):
+            with patch('utils.ai_insights_groq.get_stock_insight', return_value="Groq insight"):
+                with patch('utils.ai_insights_groq.get_risk_insight', return_value="Groq insight"):
+                    render_insights_tab(forecast, product, scenario_desc, lead_time_days, calculate_stock_recommendation)
+    
+    # Verify only Groq section is shown (no Gemini)
+    markdown_texts = ' '.join(mock_st_local.markdown_calls)
+    assert 'Groq' in markdown_texts or 'LLaMA' in markdown_texts
+    assert 'Real-Time' in markdown_texts
+    
+    # Verify Gemini is NOT in insights tab (moved to separate tab)
+    assert 'Gemini 2.5 Flash' not in markdown_texts
+    
+    # Verify 3 Groq expanders + 1 technical = 4 total
+    assert len(mock_st_local.expander_calls) == 4

@@ -2,7 +2,7 @@ name: FastAPI Gateway Tests
 
 on:
   push:
-    branches: [ GitConnectionTest, main, staging ]
+    branches: [ GitConnectionTest, main, staging, 'feat/**', 'feature/**', '*feature*', '*Feature*' ]
   pull_request:
     branches: [ main, staging ]
 
